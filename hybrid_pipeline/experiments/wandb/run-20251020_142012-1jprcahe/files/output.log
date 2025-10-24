@@ -1,0 +1,7 @@
+
+🚀 Starting joint training...
+
+📖 Epoch 1/10
+Step 5: loss=9.3572, acc=0.00%, attempts=4.0, trm_steps=16.0
+Step 10: loss=10.6069, acc=0.00%, attempts=4.0, trm_steps=16.0
+Step 15: loss=8.9961, acc=25.00%, attempts=4.0, trm_steps=16.0

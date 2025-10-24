@@ -1,0 +1,17 @@
+{"time":"2025-10-14T15:31:28.252779121+09:00","level":"INFO","msg":"stream: starting","core version":"0.19.9","symlink path":"/home/ubuntu/TinyRecursiveModels/wandb/run-20251014_153128-zlv7exwl/logs/debug-core.log"}
+{"time":"2025-10-14T15:31:28.556293685+09:00","level":"INFO","msg":"created new stream","id":"zlv7exwl"}
+{"time":"2025-10-14T15:31:28.556366832+09:00","level":"INFO","msg":"stream: started","id":"zlv7exwl"}
+{"time":"2025-10-14T15:31:28.556436281+09:00","level":"INFO","msg":"sender: started","stream_id":"zlv7exwl"}
+{"time":"2025-10-14T15:31:28.55644116+09:00","level":"INFO","msg":"writer: Do: started","stream_id":"zlv7exwl"}
+{"time":"2025-10-14T15:31:28.556541949+09:00","level":"INFO","msg":"handler: started","stream_id":"zlv7exwl"}
+{"time":"2025-10-15T23:01:45.902602648+09:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": context deadline exceeded"}
+{"time":"2025-10-16T08:43:03.524375855+09:00","level":"ERROR","msg":"runconsolelogs: failed to write to file: write /home/ubuntu/TinyRecursiveModels/wandb/run-20251014_153128-zlv7exwl/files/output.log: no space left on device"}
+{"time":"2025-10-16T08:43:14.107101457+09:00","level":"INFO","msg":"stream: closing","id":"zlv7exwl"}
+{"time":"2025-10-16T08:43:14.107615517+09:00","level":"ERROR","msg":"sender: failed to upload run summary: write /home/ubuntu/TinyRecursiveModels/wandb/run-20251014_153128-zlv7exwl/files/wandb-summary.json: no space left on device"}
+{"time":"2025-10-16T08:43:14.372158533+09:00","level":"ERROR","msg":"sender: failed to upload run config: write /home/ubuntu/TinyRecursiveModels/wandb/run-20251014_153128-zlv7exwl/files/config.yaml: no space left on device"}
+{"time":"2025-10-16T08:43:14.995638954+09:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-10-16T08:43:15.402143536+09:00","level":"INFO","msg":"handler: closed","stream_id":"zlv7exwl"}
+{"time":"2025-10-16T08:43:15.402188529+09:00","level":"INFO","msg":"writer: Close: closed","stream_id":"zlv7exwl"}
+{"time":"2025-10-16T08:43:15.402193388+09:00","level":"INFO","msg":"sender: closed","stream_id":"zlv7exwl"}
+{"time":"2025-10-16T08:43:15.402318341+09:00","level":"ERROR","msg":"writer: startStore: error closing store: store: failed closing writer: write /home/ubuntu/TinyRecursiveModels/wandb/run-20251014_153128-zlv7exwl/run-zlv7exwl.wandb: no space left on device"}
+{"time":"2025-10-16T08:43:15.402710474+09:00","level":"INFO","msg":"stream: closed","id":"zlv7exwl"}

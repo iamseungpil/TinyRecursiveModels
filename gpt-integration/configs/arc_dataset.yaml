@@ -1,0 +1,58 @@
+# ARC-AGI Dataset Configuration
+
+# Paths
+paths:
+  train: "/home/ubuntu/TinyRecursiveModels/dataset/arc/train"
+  val: "/home/ubuntu/TinyRecursiveModels/dataset/arc/eval"
+  test: "/home/ubuntu/TinyRecursiveModels/dataset/arc/test"
+
+# Grid specifications
+grid:
+  max_height: 30
+  max_width: 30
+  vocab_size: 12  # 0-9 colors + 10 (padding) + 11 (eos)
+  pad_value: 10
+  eos_value: 11
+
+# Augmentation
+augmentation:
+  enabled: true
+  rotations: [0, 90, 180, 270]  # degrees
+  flips: ["none", "horizontal", "vertical", "both"]
+  probability: 0.3
+
+# Preprocessing
+preprocessing:
+  flatten_grid: true  # 30x30 -> 900 tokens
+  normalize: false
+
+# Problem format
+problem_format:
+  num_train_examples: null  # Variable per problem
+  num_test_examples: 1  # Usually 1
+
+# Text prompt template
+text_prompt:
+  template: |
+    Solve this ARC puzzle by identifying the transformation rule.
+
+    Training Examples:
+    {train_examples}
+
+    Test Input:
+    {test_input}
+
+    Analyze the pattern and provide reasoning:
+
+  example_format: |
+    Example {idx}:
+    Input:
+    {input_grid}
+    Output:
+    {output_grid}
+
+# Sampling
+sampling:
+  shuffle_train: true
+  shuffle_val: false
+  seed: 42

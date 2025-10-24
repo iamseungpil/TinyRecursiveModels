@@ -1,0 +1,7 @@
+{"time":"2025-10-14T14:59:44.160169443+09:00","level":"INFO","msg":"stream: starting","core version":"0.19.9","symlink path":"/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/wandb/run-20251014_145944-cxxwkd6v/logs/debug-core.log"}
+{"time":"2025-10-14T14:59:44.67128363+09:00","level":"INFO","msg":"created new stream","id":"cxxwkd6v"}
+{"time":"2025-10-14T14:59:44.671345725+09:00","level":"INFO","msg":"stream: started","id":"cxxwkd6v"}
+{"time":"2025-10-14T14:59:44.671382745+09:00","level":"INFO","msg":"writer: Do: started","stream_id":"cxxwkd6v"}
+{"time":"2025-10-14T14:59:44.671451764+09:00","level":"INFO","msg":"handler: started","stream_id":"cxxwkd6v"}
+{"time":"2025-10-14T14:59:44.671456954+09:00","level":"INFO","msg":"sender: started","stream_id":"cxxwkd6v"}
+{"time":"2025-10-14T14:59:44.996739468+09:00","level":"INFO","msg":"Starting system monitor"}

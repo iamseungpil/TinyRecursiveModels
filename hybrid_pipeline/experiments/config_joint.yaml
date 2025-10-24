@@ -1,0 +1,38 @@
+# Joint Training Configuration - Matches JointModelConfig dataclass
+
+# Data
+data_path: "/data/arc/processed"
+output_dir: "/data/trm/joint_training"
+
+# LLaMA Configuration
+llama_model: "meta-llama/Llama-3.2-8B-Instruct"
+llama_device: "cuda"
+llama_frozen: true
+
+# TRM Configuration
+trm_checkpoint: null  # Set to checkpoint path if using pretrained TRM
+trm_hidden_size: 512
+trm_num_heads: 8
+trm_expansion: 4.0
+trm_H_cycles: 3
+trm_L_cycles: 6
+trm_L_layers: 4
+trm_halt_max_steps: 16
+
+# Training Configuration
+batch_size: 1
+max_attempts: 16
+epochs: 10
+lr: 0.0001
+lr_warmup_steps: 500
+weight_decay: 0.01
+
+# Logging
+project_name: "arc-hybrid-joint"
+run_name: null  # Auto-generated if null
+log_interval: 5
+checkpoint_interval: 100
+
+# Hardware
+device: "cuda:0"
+seed: 42

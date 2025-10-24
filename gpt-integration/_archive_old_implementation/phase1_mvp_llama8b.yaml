@@ -1,0 +1,86 @@
+# Phase 1 MVP Configuration
+# Frozen LLaMA-8B + Trainable Grid Decoder
+
+# Model
+model:
+  text_model: "meta-llama/Llama-3.1-8B-Instruct"
+  text_hidden_size: 4096
+  grid_hidden_size: 1024
+
+  # Grid decoder (TRM-style)
+  L_layers: 4
+  H_cycles: 2
+  L_cycles: 3
+  num_heads: 8
+  expansion: 4
+  dropout: 0.1
+
+  # Freeze text model
+  freeze_text: true
+
+  # Attempts
+  max_attempts: 3
+
+# Data
+data:
+  dataset_path: "/home/ubuntu/TinyRecursiveModels/dataset/arc"
+  num_train_problems: 10
+  num_val_problems: 5
+  augmentation: true  # rotation, flip
+  seq_len: 900  # 30x30 grid
+  vocab_size: 12  # 0-9 colors + padding + eos
+
+# Training
+training:
+  batch_size: 1
+  grad_accumulation_steps: 8
+  effective_batch_size: 8
+
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  lr_scheduler: "cosine"
+  warmup_steps: 50
+
+  epochs: 50
+  max_steps: null
+
+  gradient_clip: 1.0
+  mixed_precision: "bf16"
+  gradient_checkpointing: true
+
+# Optimization
+optimization:
+  optimizer: "adamw"
+  beta1: 0.9
+  beta2: 0.999
+  eps: 1e-8
+
+# Hardware
+hardware:
+  device: "cuda:3"
+  num_workers: 4
+  pin_memory: true
+
+# Logging
+logging:
+  wandb_project: "gpt-integration-arc"
+  wandb_run_name: "phase1_mvp_llama8b"
+  log_interval: 10
+  eval_interval: 100
+  save_interval: 500
+  output_dir: "experiments/phase1_mvp"
+
+# Evaluation
+evaluation:
+  save_predictions: true
+  visualize_samples: 5
+  metrics:
+    - "exact_match"
+    - "pixel_accuracy"
+    - "pass_at_k"
+
+# Debug
+debug:
+  overfit_single_batch: false
+  profile_memory: true
+  detect_anomaly: false

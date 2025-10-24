@@ -1,0 +1,23 @@
+2025-10-14 14:54:18,366 INFO    MainThread:3212881 [wandb_setup.py:_flush():67] Current SDK version is 0.19.9
+2025-10-14 14:54:18,367 INFO    MainThread:3212881 [wandb_setup.py:_flush():67] Configure stats pid to 3212881
+2025-10-14 14:54:18,367 INFO    MainThread:3212881 [wandb_setup.py:_flush():67] Loading settings from /home/ubuntu/.config/wandb/settings
+2025-10-14 14:54:18,367 INFO    MainThread:3212881 [wandb_setup.py:_flush():67] Loading settings from /home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/wandb/settings
+2025-10-14 14:54:18,367 INFO    MainThread:3212881 [wandb_setup.py:_flush():67] Loading settings from environment variables
+2025-10-14 14:54:18,367 INFO    MainThread:3212881 [wandb_init.py:setup_run_log_directory():662] Logging user logs to /home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/wandb/run-20251014_145418-0zzr4lbb/logs/debug.log
+2025-10-14 14:54:18,367 INFO    MainThread:3212881 [wandb_init.py:setup_run_log_directory():663] Logging internal logs to /home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/wandb/run-20251014_145418-0zzr4lbb/logs/debug-internal.log
+2025-10-14 14:54:18,367 INFO    MainThread:3212881 [wandb_init.py:init():781] calling init triggers
+2025-10-14 14:54:18,367 INFO    MainThread:3212881 [wandb_init.py:init():786] wandb.init called with sweep_config: {}
+config: {'data_path': '/data/arc/processed', 'output_dir': '/data/trm/pretrain', 'hidden_size': 512, 'num_heads': 8, 'expansion': 4.0, 'H_cycles': 3, 'L_cycles': 6, 'L_layers': 4, 'halt_max_steps': 16, 'halt_exploration_prob': 0.1, 'pos_encodings': 'rope', 'batch_size': 32, 'epochs': 1, 'lr': 0.0001, 'lr_min_ratio': 0.1, 'lr_warmup_steps': 1000, 'weight_decay': 0.01, 'project_name': 'arc-trm-pretrain', 'run_name': 'trm_20251014_145407', 'log_interval': 10, 'eval_interval': 1000, 'checkpoint_interval': 5000, 'device': 'cuda:0', 'seed': 42, '_wandb': {}}
+2025-10-14 14:54:18,367 INFO    MainThread:3212881 [wandb_init.py:init():809] starting backend
+2025-10-14 14:54:18,367 INFO    MainThread:3212881 [wandb_init.py:init():813] sending inform_init request
+2025-10-14 14:54:18,378 INFO    MainThread:3212881 [backend.py:_multiprocessing_setup():101] multiprocessing start_methods=fork,spawn,forkserver, using: spawn
+2025-10-14 14:54:18,378 INFO    MainThread:3212881 [wandb_init.py:init():823] backend started and connected
+2025-10-14 14:54:18,381 INFO    MainThread:3212881 [wandb_init.py:init():915] updated telemetry
+2025-10-14 14:54:18,389 INFO    MainThread:3212881 [wandb_init.py:init():939] communicating run to backend with 90.0 second timeout
+2025-10-14 14:54:19,391 INFO    MainThread:3212881 [wandb_init.py:init():1014] starting run threads in backend
+2025-10-14 14:54:19,834 INFO    MainThread:3212881 [wandb_run.py:_console_start():2454] atexit reg
+2025-10-14 14:54:19,835 INFO    MainThread:3212881 [wandb_run.py:_redirect():2306] redirect: wrap_raw
+2025-10-14 14:54:19,836 INFO    MainThread:3212881 [wandb_run.py:_redirect():2371] Wrapping output streams.
+2025-10-14 14:54:19,836 INFO    MainThread:3212881 [wandb_run.py:_redirect():2394] Redirects installed.
+2025-10-14 14:54:19,842 INFO    MainThread:3212881 [wandb_init.py:init():1056] run started, returning control to user process
+2025-10-14 14:54:20,181 INFO    MsgRouterThr:3212881 [mailbox.py:close():129] [no run ID] Closing mailbox, abandoning 1 handles.

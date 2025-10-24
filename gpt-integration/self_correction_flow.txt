@@ -1,0 +1,183 @@
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    SELF-CORRECTION LOOP ARCHITECTURE                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+INPUT:
+  - problem_texts: ["Solve ARC puzzle...", ...]
+  - problem_grids: [batch, 900]
+  - target_grids: [batch, 900]
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ATTEMPT 1                                                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. Text Reasoning (Frozen LLaMA-8B)                                        │
+│     Input:  "Solve ARC puzzle..."                                           │
+│     Output: z_init [batch, 4096]                                            │
+│     Mode:   torch.no_grad()                                                 │
+│                                                                              │
+│  2. Grid Generation (Trainable TRM)                                         │
+│     Input:  z_init + problem_grid                                           │
+│     Output: grid_pred [batch, 900]                                          │
+│     Mode:   torch.no_grad() (if training & not last attempt)               │
+│                                                                              │
+│  3. Verification                                                             │
+│     Check:  grid_pred == target_grids (per sample)                          │
+│     Result: [✓, ✗, ✗] (sample 0 correct, 1 & 2 wrong)                      │
+│                                                                              │
+│  4. Update Tracking                                                          │
+│     attempts_used:      [1, 1, 1]                                           │
+│     samples_to_retry:   [False, True, True]                                 │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      ↓
+                        Not all correct, continue...
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ATTEMPT 2                                                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. Text Reasoning with FEEDBACK                                            │
+│     Sample 0: (skipped, already correct)                                    │
+│     Sample 1: "Solve ARC puzzle...                                          │
+│                [FEEDBACK] Previous attempt 1 was incorrect.                 │
+│                Please reconsider the pattern..."                            │
+│     Sample 2: (same feedback added)                                         │
+│     Output: z_init [batch, 4096]                                            │
+│                                                                              │
+│  2. Grid Generation                                                          │
+│     Input:  z_init + problem_grid                                           │
+│     Output: grid_pred [batch, 900]                                          │
+│     Mode:   torch.no_grad() (if training & not last attempt)               │
+│                                                                              │
+│  3. Verification                                                             │
+│     Result: [✓, ✓, ✗] (sample 1 now correct, 2 still wrong)                │
+│                                                                              │
+│  4. Update Tracking                                                          │
+│     attempts_used:      [1, 2, 2]                                           │
+│     samples_to_retry:   [False, False, True]                                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      ↓
+                        Still sample 2 wrong, continue...
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ATTEMPT 3 (FINAL)                                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. Text Reasoning with FEEDBACK                                            │
+│     Sample 0: (skipped, already correct)                                    │
+│     Sample 1: (skipped, already correct)                                    │
+│     Sample 2: "Solve ARC puzzle...                                          │
+│                [FEEDBACK] Previous attempt 2 was incorrect.                 │
+│                Please reconsider the pattern..."                            │
+│     Output: z_init [batch, 4096]                                            │
+│                                                                              │
+│  2. Grid Generation WITH GRADIENTS                                          │
+│     Input:  z_init + problem_grid                                           │
+│     Output: grid_pred [batch, 900]                                          │
+│     Mode:   GRADIENTS ENABLED (last attempt)                                │
+│                                                                              │
+│  3. Verification                                                             │
+│     Result: [✓, ✓, ✗] (sample 2 still wrong, max attempts reached)         │
+│                                                                              │
+│  4. Final Tracking                                                           │
+│     attempts_used:      [1, 2, 3]                                           │
+│     samples_to_retry:   [False, False, True]                                │
+│     is_correct:         [True, True, False]                                 │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      ↓
+                           Max attempts reached, exit loop
+
+OUTPUT:
+  {
+    'grid_logits': [batch, 900, 12],
+    'grid_pred': [batch, 900],
+    'attempts': [1, 2, 3],              ← Per-sample attempt counts
+    'is_correct': [True, True, False],  ← Final correctness per sample
+    'z_init': [batch, 4096]             ← Last z_init (for debugging)
+  }
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ LOSS COMPUTATION                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Only FINAL prediction is used for loss:                                    │
+│    loss = CrossEntropy(grid_logits, target_grids)                           │
+│                                                                              │
+│  Gradient flows ONLY through:                                               │
+│    - Grid Generation Module (trainable)                                     │
+│    - Only from the final attempt                                            │
+│                                                                              │
+│  Gradients DO NOT flow through:                                             │
+│    - Text Reasoning Module (frozen)                                         │
+│    - Intermediate attempts 1 & 2 (torch.no_grad)                           │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ MEMORY EFFICIENCY                                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  WITHOUT self-correction (1 attempt):                                       │
+│    Memory: ~18GB VRAM                                                       │
+│    - LLaMA-8B forward: 16GB                                                 │
+│    - Grid module + gradients: 2GB                                           │
+│                                                                              │
+│  WITH self-correction (3 attempts, naive):                                  │
+│    Memory: ~24GB VRAM (OOM!)                                                │
+│    - LLaMA-8B forward × 3: 48GB (shared)                                    │
+│    - Grid module + gradients × 3: 6GB                                       │
+│                                                                              │
+│  WITH self-correction (3 attempts, OPTIMIZED):                              │
+│    Memory: ~18GB VRAM (same as before!)                                     │
+│    - LLaMA-8B forward × 3: 48GB (shared, no_grad)                          │
+│    - Grid module no_grad × 2: 0.5GB                                         │
+│    - Grid module + gradients × 1: 2GB                                       │
+│                                                                              │
+│  KEY: Only store gradients for FINAL attempt!                               │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ TRAINING PROGRESSION                                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Epoch 1:  avg_attempts = 3.00  (random, needs all attempts)               │
+│  Epoch 5:  avg_attempts = 2.75  (learning easy patterns)                   │
+│  Epoch 10: avg_attempts = 2.35  (solving ~30% on first try)                │
+│  Epoch 20: avg_attempts = 1.95  (solving ~50% on first try)                │
+│  Epoch 50: avg_attempts = 1.65  (solving ~70% on first try)                │
+│                                                                              │
+│  As model improves:                                                          │
+│    ↑ More problems solved on attempt 1                                      │
+│    ↓ Average attempts decreases                                             │
+│    ↓ Training time per epoch decreases (early stopping)                     │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ KEY IMPLEMENTATION DETAILS                                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. Per-Sample Tracking                                                      │
+│     - samples_to_retry: bool mask [batch]                                   │
+│     - attempts_used: int tensor [batch]                                     │
+│     - Enables early stopping per sample                                     │
+│                                                                              │
+│  2. Feedback Mechanism                                                       │
+│     - Adds context about previous failure                                   │
+│     - Encourages model to try different approach                            │
+│     - Format: "[FEEDBACK] Previous attempt N was incorrect..."              │
+│                                                                              │
+│  3. Gradient Control                                                         │
+│     - if self.training and attempt < max_attempts - 1:                      │
+│         with torch.no_grad(): ...                                           │
+│     - Prevents gradient accumulation across attempts                        │
+│                                                                              │
+│  4. Early Stopping                                                           │
+│     - if not samples_to_retry.any(): break                                  │
+│     - Saves computation when all samples correct                            │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘

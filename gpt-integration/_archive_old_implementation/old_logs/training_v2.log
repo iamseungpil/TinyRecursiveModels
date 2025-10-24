@@ -1,0 +1,11 @@
+usage: train_trm_hybrid.py [-h] [--batch_size BATCH_SIZE]
+                           [--H_cycles H_CYCLES] [--L_cycles L_CYCLES]
+                           [--L_layers L_LAYERS] [--hidden_size HIDDEN_SIZE]
+                           [--num_train_problems NUM_TRAIN_PROBLEMS]
+                           [--num_val_problems NUM_VAL_PROBLEMS]
+                           [--num_epochs NUM_EPOCHS] [--lr LR]
+                           [--warmup_steps WARMUP_STEPS]
+                           [--project_name PROJECT_NAME] [--run_name RUN_NAME]
+                           [--save_dir SAVE_DIR] [--device DEVICE]
+                           [--seed SEED]
+train_trm_hybrid.py: error: unrecognized arguments: --text_model_name meta-llama/Llama-3.1-8B-Instruct
