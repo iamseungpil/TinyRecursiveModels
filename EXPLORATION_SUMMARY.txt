@@ -1,0 +1,270 @@
+================================================================================
+TRM & HYBRID PIPELINE EXPLORATION SUMMARY
+================================================================================
+
+Generated: 2025-10-24
+Repository: /home/user/TinyRecursiveModels/
+Branch: claude/explore-hierarchical-diffusion-011CURoNcE4GVC4CuyLzyn5f
+
+================================================================================
+1. CORE FINDINGS
+================================================================================
+
+1.1 TRM ARCHITECTURE
+- Location: /home/user/TinyRecursiveModels/models/recursive_reasoning/trm.py
+- Size: 307 lines
+- Key: Uses ACT (Adaptive Computation Time) with learnable halting
+- Hidden State: z_H (high-level) and z_L (low-level) both [batch, 900, 512]
+- CRITICAL ISSUE: Both z_H and z_L use SAME L_level module (line 220)
+  This means no hierarchical distinction despite separate tensors
+
+1.2 RNN H VECTORS EXPLAINED
+- z_H: High-level hidden state [batch, seq_len=900, hidden_size=512]
+- z_L: Low-level hidden state [batch, seq_len=900, hidden_size=512]
+- Usage: Recursive refinement through H_cycles and L_cycles
+- Problem: Identically processed, no hierarchical role
+- Solution: Create separate H_level module (currently only L_level exists)
+
+1.3 ABSTRACTION HANDLING
+- Current: EXPLICITLY AVOIDS abstractions (by design per paper)
+- All positions processed at same "level"
+- No coarse-to-fine decomposition
+- "Kill abstraction" = don't add lossy compression layers
+
+1.4 HIERARCHICAL ATTEMPTS
+- trm_hier6.py: Experimental 6-level model (sums all levels = loses hierarchy)
+- hrm.py: Original HRM (more complex, TRM simplified from this)
+- hierarchical_layers.py: Archived component (not used)
+- Status: No working hierarchical implementation exists
+
+1.5 DIFFUSION CODE
+- Status: NONE FOUND
+- Searched all directories, configs, documentation
+- This is a NEW approach to add
+
+================================================================================
+2. HYBRID PIPELINE STRUCTURE
+================================================================================
+
+2.1 COMPONENTS
+Location: /home/user/TinyRecursiveModels/hybrid_pipeline/
+
+├── gpt_oss_port/
+│   ├── llm.py              (TextReasoningModule - LLaMA wrapper)
+│   ├── planner.py          (ARCPlanner - multi-attempt reasoning)
+│   ├── verifier.py         (GridVerifier - validation + feedback)
+│   ├── grid_utils.py       (Grid formatting)
+│   ├── dataset_access.py   (Dataset wrapper)
+│   ├── loss_guided_generation.py
+│   ├── run_baseline.py     (LLM-only baseline)
+│   └── tests/
+│
+├── adapters/
+│   ├── text_to_latent.py   (4096→1024→512, learns position embeddings)
+│   ├── latent_to_text.py   (900,512→512→4096, attention pooling)
+│   ├── feedback_formatter.py
+│   ├── vae_adapter.py      (Variational bottleneck option)
+│   └── tests/
+│
+├── trm_pretrain/
+│   ├── train_trm.py
+│   └── eval_trm.py
+│
+└── experiments/
+    ├── run_joint_training.py
+    ├── config_joint.yaml
+    └── scripts/
+
+2.2 ADAPTERS IN DETAIL
+
+TextToLatentAdapter (/hybrid_pipeline/adapters/text_to_latent.py:93-212)
+- Input: LLM hidden [batch, 4096]
+- Stage 1: Compress [4096 → 1024] (Linear + GELU + LayerNorm)
+- Stage 2: Position expansion → [batch, seq_len=900, 1024]
+  * Uses learnable position_embeddings parameter!
+  * Can use cross-attention for LLM sequence awareness
+- Stage 3: Project to TRM [1024 → 1024] → split z_H + z_L
+- Output: z_H [batch, 900, 512], z_L [batch, 900, 512]
+
+LatentToTextAdapter (/hybrid_pipeline/adapters/latent_to_text.py:12-46)
+- Input: z_H [batch, 900, 512], z_L [batch, 900, 512]
+- Stage 1: AttentionPooling (learns grid importance weights)
+  * z_H_pooled = weighted_sum(z_H, attention(z_H))  → [batch, 512]
+  * z_L_pooled = weighted_sum(z_L, attention(z_L))  → [batch, 512]
+- Stage 2: Concatenate [batch, 1024]
+- Stage 3: Project to LLM [1024 → 2048 → 4096]
+- Output: latent_prefix [batch, 4096]
+
+VAEAdapter (/hybrid_pipeline/adapters/vae_adapter.py)
+- Adds variational bottleneck
+- Encoder: LLM → (mu, logvar) for sampling
+- Decoder: TRM latent → reconstructed LLM hidden
+- Loss: MSE + β*KL divergence
+
+2.3 KEY LIMITATION
+- Adapters pool entire 900-cell grid to single token
+- No hierarchical structure preservation
+- AttentionPooling helps but still lossy 900→1 compression
+
+================================================================================
+3. ABSOLUTE FILE PATHS EXPLORED
+================================================================================
+
+CORE MODEL FILES:
+✓ /home/user/TinyRecursiveModels/models/recursive_reasoning/trm.py
+✓ /home/user/TinyRecursiveModels/models/recursive_reasoning/trm_hier6.py
+✓ /home/user/TinyRecursiveModels/models/recursive_reasoning/trm_singlez.py
+✓ /home/user/TinyRecursiveModels/models/recursive_reasoning/hrm.py
+✓ /home/user/TinyRecursiveModels/models/layers.py
+✓ /home/user/TinyRecursiveModels/models/common.py
+✓ /home/user/TinyRecursiveModels/models/ema.py
+✓ /home/user/TinyRecursiveModels/models/losses.py
+✓ /home/user/TinyRecursiveModels/models/sparse_embedding.py
+
+TRAINING & CONFIG:
+✓ /home/user/TinyRecursiveModels/pretrain.py (657 lines - main training script)
+✓ /home/user/TinyRecursiveModels/puzzle_dataset.py (10,616 lines - dataset handling)
+✓ /home/user/TinyRecursiveModels/config/cfg_pretrain.yaml
+✓ /home/user/TinyRecursiveModels/config/arch/trm.yaml
+✓ /home/user/TinyRecursiveModels/config/arch/trm_hier6.yaml
+✓ /home/user/TinyRecursiveModels/config/arch/trm_singlez.yaml
+✓ /home/user/TinyRecursiveModels/config/arch/hrm.yaml
+✓ /home/user/TinyRecursiveModels/config/arch/transformers_baseline.yaml
+
+HYBRID PIPELINE - ADAPTERS:
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/adapters/text_to_latent.py (213 lines)
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/adapters/latent_to_text.py (149 lines)
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/adapters/vae_adapter.py (239 lines)
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/adapters/feedback_formatter.py
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/adapters/tests/
+
+HYBRID PIPELINE - GPT_OSS:
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/gpt_oss_port/llm.py
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/gpt_oss_port/planner.py
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/gpt_oss_port/verifier.py
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/gpt_oss_port/grid_utils.py
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/gpt_oss_port/dataset_access.py
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/gpt_oss_port/loss_guided_generation.py
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/gpt_oss_port/run_baseline.py
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/gpt_oss_port/tests/
+
+HYBRID PIPELINE - EXPERIMENTS:
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/experiments/run_joint_training.py (200+ lines)
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/experiments/config_joint.yaml
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/eval_trm.py
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/precompute_helmarc_embeddings.py
+
+DOCUMENTATION:
+✓ /home/user/TinyRecursiveModels/README.md (main paper + motivation)
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/README.md
+✓ /home/user/TinyRecursiveModels/hybrid_pipeline/QUICKSTART.md
+✓ /home/user/TinyRecursiveModels/AGENTS.md (repo guidelines)
+✓ /home/user/TinyRecursiveModels/CHECKPOINT_ANALYSIS_SUMMARY.md
+✓ /home/user/TinyRecursiveModels/TRM_EVALUATION_SUMMARY.md
+✓ /home/user/TinyRecursiveModels/GPT_OSS_ANALYSIS_EXPLANATION.md
+✓ /home/user/TinyRecursiveModels/DSL_COVERAGE_ISSUE.md
+
+ARCHIVED/HISTORICAL:
+✓ /home/user/TinyRecursiveModels/gpt-integration/_archive_old_implementation/components/hierarchical_layers.py
+✓ /home/user/TinyRecursiveModels/gpt-integration/models/trm_hybrid.py
+✓ /home/user/TinyRecursiveModels/gpt-integration/STATUS.md
+✓ /home/user/TinyRecursiveModels/gpt-integration/EXPERIMENT_PLAN.md
+✓ /home/user/TinyRecursiveModels/gpt-integration/TRM_IMPLEMENTATION.md
+
+EVALUATION:
+✓ /home/user/TinyRecursiveModels/eval_and_visualize_trm.py
+✓ /home/user/TinyRecursiveModels/analyze_trm_arc_results.py
+✓ /home/user/TinyRecursiveModels/evaluators/ (directory)
+
+================================================================================
+4. KEY INSIGHTS & RECOMMENDATIONS
+================================================================================
+
+4.1 IMMEDIATE ACTION: Separate H and L Processing
+Location: /home/user/TinyRecursiveModels/models/recursive_reasoning/trm.py:220
+
+Current (WRONG):
+    z_H = self.L_level(z_H, z_L, **seq_info)  # Uses L_level!
+
+Fix:
+    z_H = self.H_level(z_H, z_L, **seq_info)  # Use H_level!
+
+Then create H_level in __init__ (currently H_layers config unused):
+    self.H_level = TinyRecursiveReasoningModel_ACTV1ReasoningModule(...)
+
+4.2 HIERARCHICAL DIFFUSION APPROACH
+Three-level hierarchy:
+- Level 0: 3x3 grid (9 cells) - coarse reasoning
+- Level 1: 6x6 grid (36 cells) - medium resolution
+- Level 2: 30x30 grid (900 cells) - fine details
+
+Process: Coarse→Medium→Fine with upsampling diffusion
+
+4.3 ADAPTER ENHANCEMENTS
+TextToLatentAdapter: Already has learnable position_embeddings!
+  - Can add separate coarse/medium/fine init heads
+
+LatentToTextAdapter: Can preserve hierarchy
+  - Pool each level separately before concatenation
+
+================================================================================
+5. GENERATED DOCUMENTATION
+================================================================================
+
+Two comprehensive documents created:
+
+1. /home/user/TinyRecursiveModels/TRM_ARCHITECTURE_EXPLORATION.md (678 lines)
+   - Complete architecture analysis
+   - Detailed implementation recommendations
+   - Phase-by-phase development roadmap
+   - Technical details and considerations
+
+2. /home/user/TinyRecursiveModels/QUICK_REFERENCE_TRM_ARCHITECTURE.md
+   - File locations with line counts
+   - Critical code snippets
+   - Implementation checklist
+   - Testing commands
+
+================================================================================
+6. EXPLORATION COMPLETENESS
+================================================================================
+
+✓ TRM Core Architecture          - THOROUGHLY ANALYZED
+✓ RNN h Vector (z_H, z_L)        - FULLY UNDERSTOOD
+✓ Hybrid Pipeline Structure      - COMPLETELY MAPPED
+✓ Adapter Implementations        - ANALYZED IN DETAIL
+✓ Existing Hierarchical Code     - REVIEWED (HIER6, HRM)
+✓ Diffusion Implementations      - CONFIRMED NOT EXIST
+✓ Configuration System           - MAPPED (Hydra + YAML)
+✓ Training Loop                  - UNDERSTOOD
+✓ ACT Halting Mechanism          - EXPLAINED
+
+CONFIDENCE LEVEL: VERY HIGH
+Can now provide detailed recommendations for implementing hierarchical diffusion
+
+================================================================================
+7. NEXT STEPS
+================================================================================
+
+Phase 1 (1-2 weeks): Separate H and L Processing
+- Modify /models/recursive_reasoning/trm.py
+- Create separate H_level module
+- Test on Sudoku-Extreme
+
+Phase 2 (2-3 weeks): Hierarchical Diffusion
+- Create /models/recursive_reasoning/trm_hierarchical_diffusion.py
+- Implement 3-level coarse-to-fine
+- Add grid resampling utilities
+
+Phase 3 (1 week): Adapter Updates
+- Create hierarchical-aware adapters
+- Update hybrid_pipeline integration
+
+Phase 4 (2 weeks): Integration & Validation
+- Joint training with new architecture
+- Evaluation on ARC-AGI
+
+================================================================================
+
+All exploration complete. Two detailed documents saved to repository.
