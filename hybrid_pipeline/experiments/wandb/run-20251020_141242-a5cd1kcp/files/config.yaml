@@ -1,0 +1,132 @@
+_wandb:
+    value:
+        cli_version: 0.19.9
+        m: []
+        python_version: 3.10.14
+        t:
+            "1":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 55
+                - 71
+                - 105
+            "2":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 55
+                - 71
+                - 105
+            "3":
+                - 13
+                - 16
+                - 23
+                - 55
+            "4": 3.10.14
+            "5": 0.19.9
+            "6": 4.55.0
+            "8":
+                - 5
+            "12": 0.19.9
+            "13": linux-x86_64
+adapter_checkpoint:
+    value: /data/hybrid_training/phase1/adapter_trm_supervised.pt
+batch_size:
+    value: 4
+checkpoint_interval:
+    value: 100
+cross_attention_dropout:
+    value: 0
+cross_attention_heads:
+    value: 8
+cross_attention_layers:
+    value: 2
+data_path:
+    value: /data/helmarc_trm_v3
+device:
+    value: cuda:0
+embeddings_path:
+    value: /data/helmarc_gptoss_embeddings.pt
+enable_repulsion:
+    value: false
+epochs:
+    value: 10
+llama_device:
+    value: cuda
+llama_device_map:
+    value: auto
+llama_frozen:
+    value: true
+llama_model:
+    value: openai/gpt-oss-20b
+llama_torch_dtype:
+    value: bfloat16
+llama_trust_remote_code:
+    value: true
+llama_use_fast_tokenizer:
+    value: false
+load_checkpoint:
+    value: null
+log_interval:
+    value: 5
+loss_guide_high_threshold:
+    value: 2
+loss_guide_low_threshold:
+    value: 0.5
+loss_guide_num_candidates:
+    value: 3
+lr:
+    value: 5e-05
+lr_warmup_steps:
+    value: 500
+max_attempts:
+    value: 4
+output_dir:
+    value: /data/hybrid_training/phase2_joint
+project_name:
+    value: arc-hybrid-joint
+repulsion_weight:
+    value: 0.5
+run_name:
+    value: null
+seed:
+    value: 42
+trm_H_cycles:
+    value: 3
+trm_L_cycles:
+    value: 6
+trm_L_layers:
+    value: 4
+trm_checkpoint:
+    value: /data/trm/checkpoints/pretrain_att_arc1concept_4/step_362650
+trm_expansion:
+    value: 4
+trm_halt_max_steps:
+    value: 16
+trm_hidden_size:
+    value: 512
+trm_num_heads:
+    value: 8
+use_attention_pooling:
+    value: true
+use_chat_template:
+    value: false
+use_cross_attention_bridge:
+    value: false
+use_loss_guided_generation:
+    value: false
+use_precomputed_embeddings:
+    value: true
+use_vae_adapter:
+    value: false
+vae_beta:
+    value: 0.1
+weight_decay:
+    value: 0.01

@@ -1,0 +1,92 @@
+_wandb:
+    value:
+        cli_version: 0.19.9
+        m: []
+        python_version: 3.10.14
+        t:
+            "1":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 55
+                - 71
+                - 105
+            "2":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 55
+                - 71
+                - 105
+            "3":
+                - 13
+                - 16
+                - 23
+                - 55
+            "4": 3.10.14
+            "5": 0.19.9
+            "6": 4.55.0
+            "8":
+                - 5
+            "12": 0.19.9
+            "13": linux-x86_64
+H_cycles:
+    value: 2
+L_cycles:
+    value: 1
+L_layers:
+    value: 4
+batch_size:
+    value: 1
+device:
+    value: cuda
+eval_interval:
+    value: 1
+expansion:
+    value: 2
+gradient_clip:
+    value: 1
+hidden_size:
+    value: 512
+log_interval:
+    value: 10
+lr:
+    value: 0.0001
+num_epochs:
+    value: 50
+num_heads:
+    value: 8
+num_train_problems:
+    value: 10
+num_val_problems:
+    value: 5
+num_workers:
+    value: 4
+pos_encodings:
+    value: rope
+project_name:
+    value: arc-trm-hybrid
+run_name:
+    value: phase1_trm_fixed
+save_dir:
+    value: ./checkpoints
+seed:
+    value: 42
+seq_len:
+    value: 900
+text_hidden_size:
+    value: 4096
+text_model_name:
+    value: meta-llama/Llama-3.1-8B-Instruct
+vocab_size:
+    value: 12
+warmup_steps:
+    value: 50
+weight_decay:
+    value: 0.01

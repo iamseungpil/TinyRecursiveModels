@@ -1,0 +1,29 @@
+2025-10-16 09:20:01,694 INFO    MainThread:831534 [wandb_setup.py:_flush():67] Current SDK version is 0.19.9
+2025-10-16 09:20:01,694 INFO    MainThread:831534 [wandb_setup.py:_flush():67] Configure stats pid to 831534
+2025-10-16 09:20:01,694 INFO    MainThread:831534 [wandb_setup.py:_flush():67] Loading settings from /home/ubuntu/.config/wandb/settings
+2025-10-16 09:20:01,694 INFO    MainThread:831534 [wandb_setup.py:_flush():67] Loading settings from /home/ubuntu/TinyRecursiveModels/wandb/settings
+2025-10-16 09:20:01,695 INFO    MainThread:831534 [wandb_setup.py:_flush():67] Loading settings from environment variables
+2025-10-16 09:20:01,695 INFO    MainThread:831534 [wandb_init.py:setup_run_log_directory():662] Logging user logs to /home/ubuntu/TinyRecursiveModels/wandb/run-20251016_092001-hdsju1jj/logs/debug.log
+2025-10-16 09:20:01,695 INFO    MainThread:831534 [wandb_init.py:setup_run_log_directory():663] Logging internal logs to /home/ubuntu/TinyRecursiveModels/wandb/run-20251016_092001-hdsju1jj/logs/debug-internal.log
+2025-10-16 09:20:01,695 INFO    MainThread:831534 [wandb_init.py:init():781] calling init triggers
+2025-10-16 09:20:01,695 INFO    MainThread:831534 [wandb_init.py:init():786] wandb.init called with sweep_config: {}
+config: {'arch': {'name': 'recursive_reasoning.trm@TinyRecursiveReasoningModel_ACTV1', 'loss': {'name': 'losses@ACTLossHead', 'loss_type': 'stablemax_cross_entropy'}, 'halt_exploration_prob': 0.1, 'halt_max_steps': 16, 'H_cycles': 3, 'L_cycles': 4, 'H_layers': 0, 'L_layers': 2, 'hidden_size': 512, 'num_heads': 8, 'expansion': 4, 'puzzle_emb_ndim': 512, 'pos_encodings': 'rope', 'forward_dtype': 'bfloat16', 'mlp_t': False, 'puzzle_emb_len': 16, 'no_ACT_continue': True}, 'data_paths': ['/data/arc1concept-aug-1000'], 'data_paths_test': [], 'evaluators': [{'name': 'arc@ARC'}], 'global_batch_size': 768, 'epochs': 100000, 'lr': 0.0001, 'lr_min_ratio': 1.0, 'lr_warmup_steps': 2000, 'weight_decay': 0.1, 'beta1': 0.9, 'beta2': 0.95, 'puzzle_emb_lr': 0.01, 'puzzle_emb_weight_decay': 0.1, 'project_name': 'Arc1concept-aug-1000-ACT-torch', 'run_name': 'pretrain_att_arc1concept_4', 'load_checkpoint': None, 'checkpoint_path': '/data/trm/checkpoints/pretrain_att_arc1concept_4', 'seed': 0, 'checkpoint_every_eval': True, 'eval_interval': 10000, 'min_eval_interval': 0, 'eval_save_outputs': [], 'ema': True, 'ema_rate': 0.999, 'freeze_weights': False, '_wandb': {}}
+2025-10-16 09:20:01,695 INFO    MainThread:831534 [wandb_init.py:init():809] starting backend
+2025-10-16 09:20:01,695 INFO    MainThread:831534 [wandb_init.py:init():813] sending inform_init request
+2025-10-16 09:20:01,703 INFO    MainThread:831534 [backend.py:_multiprocessing_setup():101] multiprocessing start_methods=fork,spawn,forkserver, using: spawn
+2025-10-16 09:20:01,703 INFO    MainThread:831534 [wandb_init.py:init():823] backend started and connected
+2025-10-16 09:20:01,705 INFO    MainThread:831534 [wandb_init.py:init():915] updated telemetry
+2025-10-16 09:20:01,710 INFO    MainThread:831534 [wandb_init.py:init():939] communicating run to backend with 90.0 second timeout
+2025-10-16 09:20:02,321 INFO    MainThread:831534 [wandb_init.py:init():1014] starting run threads in backend
+2025-10-16 09:20:04,634 INFO    MainThread:831534 [wandb_run.py:_console_start():2454] atexit reg
+2025-10-16 09:20:04,634 INFO    MainThread:831534 [wandb_run.py:_redirect():2306] redirect: wrap_raw
+2025-10-16 09:20:04,635 INFO    MainThread:831534 [wandb_run.py:_redirect():2371] Wrapping output streams.
+2025-10-16 09:20:04,635 INFO    MainThread:831534 [wandb_run.py:_redirect():2394] Redirects installed.
+2025-10-16 09:20:04,640 INFO    MainThread:831534 [wandb_init.py:init():1056] run started, returning control to user process
+2025-10-19 19:37:36,405 INFO    MainThread:831534 [wandb_run.py:_finish():2189] finishing run gistdslab/Arc1concept-aug-1000-ACT-torch/hdsju1jj
+2025-10-19 19:37:36,406 INFO    MainThread:831534 [wandb_run.py:_atexit_cleanup():2419] got exitcode: 0
+2025-10-19 19:37:36,406 INFO    MainThread:831534 [wandb_run.py:_restore():2401] restore
+2025-10-19 19:37:36,406 INFO    MainThread:831534 [wandb_run.py:_restore():2407] restore done
+2025-10-19 19:37:38,202 INFO    MainThread:831534 [wandb_run.py:_footer_history_summary_info():4064] rendering history
+2025-10-19 19:37:38,203 INFO    MainThread:831534 [wandb_run.py:_footer_history_summary_info():4096] rendering summary
+2025-10-19 19:37:38,204 INFO    MainThread:831534 [wandb_run.py:_footer_sync_info():4025] logging synced files

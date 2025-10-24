@@ -1,0 +1,50 @@
+
+🔄 Epoch 1/1
+Traceback (most recent call last):
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 337, in <module>
+    main()
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 333, in main
+    train(config)
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 285, in train
+    metrics, carry = train_step(
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 169, in train_step
+    carry, loss, metrics, _, _ = model(carry=carry, batch=batch, return_keys=[])
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/losses.py", line 58, in forward
+    new_carry, outputs = self.model(**model_kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm.py", line 252, in forward
+    new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm.py", line 192, in reset_carry
+    z_H=torch.where(reset_flag.view(-1, 1, 1), self.H_init, carry.z_H),
+RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!
+Traceback (most recent call last):
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 337, in <module>
+    main()
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 333, in main
+    train(config)
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 285, in train
+    metrics, carry = train_step(
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 169, in train_step
+    carry, loss, metrics, _, _ = model(carry=carry, batch=batch, return_keys=[])
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/losses.py", line 58, in forward
+    new_carry, outputs = self.model(**model_kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm.py", line 252, in forward
+    new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm.py", line 192, in reset_carry
+    z_H=torch.where(reset_flag.view(-1, 1, 1), self.H_init, carry.z_H),
+RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!

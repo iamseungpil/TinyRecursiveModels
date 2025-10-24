@@ -1,0 +1,243 @@
+
+Epoch 1/50
+Training:   0%|          | 0/10 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  10%|█         | 1/10 [00:22<03:21, 22.34s/it, loss=3.91, acc=0, lr=0]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  20%|██        | 2/10 [00:41<02:43, 20.40s/it, loss=3.91, acc=0, lr=0]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  30%|███       | 3/10 [01:00<02:18, 19.79s/it, loss=3.91, acc=0, lr=0]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  40%|████      | 4/10 [01:19<01:57, 19.55s/it, loss=3.91, acc=0, lr=0]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  50%|█████     | 5/10 [01:38<01:37, 19.40s/it, loss=3.91, acc=0, lr=0]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  60%|██████    | 6/10 [01:57<01:17, 19.28s/it, loss=3.91, acc=0, lr=0]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  70%|███████   | 7/10 [02:17<00:58, 19.36s/it, loss=3.91, acc=0, lr=0]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  80%|████████  | 8/10 [02:36<00:38, 19.29s/it, loss=3.91, acc=0, lr=0]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  90%|█████████ | 9/10 [02:55<00:19, 19.29s/it, loss=3.91, acc=0, lr=0]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training: 100%|██████████| 10/10 [03:14<00:00, 19.47s/it, loss=3.91, acc=0, lr=0]
+Epoch 1 - Loss: 3.3406, Accuracy: 0.0000
+Running validation...
+Validation:   0%|          | 0/5 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  20%|██        | 1/5 [00:19<01:17, 19.47s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  40%|████      | 2/5 [00:38<00:57, 19.27s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  60%|██████    | 3/5 [00:57<00:38, 19.30s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  80%|████████  | 4/5 [01:17<00:19, 19.24s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:   0%|          | 0/10 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation - Loss: 2.9594, Accuracy: 0.0000
+
+Epoch 2/50
+Training:  10%|█         | 1/10 [00:19<02:54, 19.41s/it, loss=4.06, acc=0, lr=2e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  20%|██        | 2/10 [00:39<02:36, 19.61s/it, loss=4.06, acc=0, lr=2e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  30%|███       | 3/10 [00:58<02:15, 19.36s/it, loss=4.06, acc=0, lr=2e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  40%|████      | 4/10 [01:17<01:55, 19.23s/it, loss=4.06, acc=0, lr=2e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  50%|█████     | 5/10 [01:36<01:35, 19.14s/it, loss=4.06, acc=0, lr=2e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  60%|██████    | 6/10 [01:55<01:16, 19.11s/it, loss=4.06, acc=0, lr=2e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  70%|███████   | 7/10 [02:14<00:57, 19.11s/it, loss=4.06, acc=0, lr=2e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  80%|████████  | 8/10 [02:33<00:38, 19.08s/it, loss=4.06, acc=0, lr=2e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  90%|█████████ | 9/10 [02:52<00:19, 19.09s/it, loss=4.06, acc=0, lr=2e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training: 100%|██████████| 10/10 [03:11<00:00, 19.18s/it, loss=4.06, acc=0, lr=2e-5]
+Epoch 2 - Loss: 3.0859, Accuracy: 0.0000
+Running validation...
+Validation:   0%|          | 0/5 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  20%|██        | 1/5 [00:19<01:18, 19.72s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  40%|████      | 2/5 [00:39<00:59, 19.83s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  60%|██████    | 3/5 [00:58<00:39, 19.60s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  80%|████████  | 4/5 [01:18<00:19, 19.41s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:   0%|          | 0/10 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation - Loss: 3.2406, Accuracy: 0.0000
+
+Epoch 3/50
+Training:  10%|█         | 1/10 [00:19<02:54, 19.39s/it, loss=2.14, acc=0, lr=4e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  20%|██        | 2/10 [00:38<02:33, 19.15s/it, loss=2.14, acc=0, lr=4e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  30%|███       | 3/10 [00:57<02:13, 19.05s/it, loss=2.14, acc=0, lr=4e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  40%|████      | 4/10 [01:16<01:54, 19.13s/it, loss=2.14, acc=0, lr=4e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  50%|█████     | 5/10 [01:35<01:35, 19.19s/it, loss=2.14, acc=0, lr=4e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  60%|██████    | 6/10 [01:55<01:17, 19.35s/it, loss=2.14, acc=0, lr=4e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  70%|███████   | 7/10 [02:14<00:57, 19.26s/it, loss=2.14, acc=0, lr=4e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  80%|████████  | 8/10 [02:33<00:38, 19.26s/it, loss=2.14, acc=0, lr=4e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  90%|█████████ | 9/10 [02:53<00:19, 19.26s/it, loss=2.14, acc=0, lr=4e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training: 100%|██████████| 10/10 [03:12<00:00, 19.24s/it, loss=2.14, acc=0, lr=4e-5]
+Epoch 3 - Loss: 2.3789, Accuracy: 0.0000
+Running validation...
+Validation:   0%|          | 0/5 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  20%|██        | 1/5 [00:19<01:18, 19.58s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  40%|████      | 2/5 [00:38<00:58, 19.40s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  60%|██████    | 3/5 [00:58<00:38, 19.35s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  80%|████████  | 4/5 [01:17<00:19, 19.31s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:   0%|          | 0/10 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation - Loss: 2.8188, Accuracy: 0.0000
+
+Epoch 4/50
+Training:  10%|█         | 1/10 [00:19<02:58, 19.86s/it, loss=0.957, acc=0, lr=6e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  20%|██        | 2/10 [00:39<02:36, 19.60s/it, loss=0.957, acc=0, lr=6e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  30%|███       | 3/10 [00:58<02:16, 19.52s/it, loss=0.957, acc=0, lr=6e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  40%|████      | 4/10 [01:17<01:55, 19.26s/it, loss=0.957, acc=0, lr=6e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  50%|█████     | 5/10 [01:36<01:35, 19.19s/it, loss=0.957, acc=0, lr=6e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  60%|██████    | 6/10 [01:55<01:16, 19.12s/it, loss=0.957, acc=0, lr=6e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  70%|███████   | 7/10 [02:14<00:57, 19.15s/it, loss=0.957, acc=0, lr=6e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  80%|████████  | 8/10 [02:33<00:38, 19.14s/it, loss=0.957, acc=0, lr=6e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  90%|█████████ | 9/10 [02:52<00:19, 19.10s/it, loss=0.957, acc=0, lr=6e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training: 100%|██████████| 10/10 [03:12<00:00, 19.23s/it, loss=0.957, acc=0, lr=6e-5]
+Epoch 4 - Loss: 2.8605, Accuracy: 0.0000
+Running validation...
+Validation:   0%|          | 0/5 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  20%|██        | 1/5 [00:19<01:19, 19.85s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  40%|████      | 2/5 [00:38<00:58, 19.41s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  60%|██████    | 3/5 [00:58<00:38, 19.27s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  80%|████████  | 4/5 [01:17<00:19, 19.19s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:   0%|          | 0/10 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation - Loss: 3.1437, Accuracy: 0.0000
+
+Epoch 5/50
+Training:  10%|█         | 1/10 [00:19<02:56, 19.58s/it, loss=2.36, acc=0, lr=8e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  20%|██        | 2/10 [00:38<02:34, 19.34s/it, loss=2.36, acc=0, lr=8e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  30%|███       | 3/10 [00:57<02:14, 19.21s/it, loss=2.36, acc=0, lr=8e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  40%|████      | 4/10 [01:16<01:54, 19.16s/it, loss=2.36, acc=0, lr=8e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  50%|█████     | 5/10 [01:35<01:35, 19.07s/it, loss=2.36, acc=0, lr=8e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  60%|██████    | 6/10 [01:55<01:16, 19.20s/it, loss=2.36, acc=0, lr=8e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  70%|███████   | 7/10 [02:14<00:57, 19.16s/it, loss=2.36, acc=0, lr=8e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  80%|████████  | 8/10 [02:33<00:38, 19.10s/it, loss=2.36, acc=0, lr=8e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  90%|█████████ | 9/10 [02:52<00:19, 19.08s/it, loss=2.36, acc=0, lr=8e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training: 100%|██████████| 10/10 [03:11<00:00, 19.15s/it, loss=2.36, acc=0, lr=8e-5]
+Epoch 5 - Loss: 2.7219, Accuracy: 0.0000
+Running validation...
+Validation:   0%|          | 0/5 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  20%|██        | 1/5 [00:19<01:18, 19.57s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  40%|████      | 2/5 [00:38<00:57, 19.32s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  60%|██████    | 3/5 [00:57<00:38, 19.24s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  80%|████████  | 4/5 [01:17<00:19, 19.25s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:   0%|          | 0/10 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation - Loss: 2.9281, Accuracy: 0.0000
+
+Epoch 6/50
+Training:  10%|█         | 1/10 [00:19<02:56, 19.58s/it, loss=3.97, acc=0, lr=0.0001]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  20%|██        | 2/10 [00:38<02:35, 19.38s/it, loss=3.97, acc=0, lr=0.0001]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  30%|███       | 3/10 [00:58<02:15, 19.43s/it, loss=3.97, acc=0, lr=0.0001]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  40%|████      | 4/10 [01:17<01:56, 19.45s/it, loss=3.97, acc=0, lr=0.0001]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  50%|█████     | 5/10 [01:37<01:37, 19.46s/it, loss=3.97, acc=0, lr=0.0001]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  60%|██████    | 6/10 [01:56<01:17, 19.39s/it, loss=3.97, acc=0, lr=0.0001]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  70%|███████   | 7/10 [02:15<00:57, 19.28s/it, loss=3.97, acc=0, lr=0.0001]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  80%|████████  | 8/10 [02:34<00:38, 19.23s/it, loss=3.97, acc=0, lr=0.0001]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  90%|█████████ | 9/10 [02:53<00:19, 19.24s/it, loss=3.97, acc=0, lr=0.0001]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training: 100%|██████████| 10/10 [03:13<00:00, 19.39s/it, loss=3.97, acc=0, lr=0.0001]
+Epoch 6 - Loss: 2.6406, Accuracy: 0.0000
+Running validation...
+Validation:   0%|          | 0/5 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  20%|██        | 1/5 [00:19<01:18, 19.54s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  40%|████      | 2/5 [00:38<00:57, 19.32s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  60%|██████    | 3/5 [00:57<00:38, 19.24s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  80%|████████  | 4/5 [01:16<00:19, 19.19s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:   0%|          | 0/10 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation - Loss: 2.8937, Accuracy: 0.0000
+
+Epoch 7/50
+Training:  10%|█         | 1/10 [00:19<02:52, 19.19s/it, loss=3.02, acc=0, lr=9.99e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  20%|██        | 2/10 [00:38<02:32, 19.10s/it, loss=3.02, acc=0, lr=9.99e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  30%|███       | 3/10 [00:57<02:13, 19.09s/it, loss=3.02, acc=0, lr=9.99e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  40%|████      | 4/10 [01:16<01:55, 19.25s/it, loss=3.02, acc=0, lr=9.99e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  50%|█████     | 5/10 [01:35<01:36, 19.20s/it, loss=3.02, acc=0, lr=9.99e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  60%|██████    | 6/10 [01:55<01:16, 19.16s/it, loss=3.02, acc=0, lr=9.99e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  70%|███████   | 7/10 [02:14<00:57, 19.16s/it, loss=3.02, acc=0, lr=9.99e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  80%|████████  | 8/10 [02:33<00:38, 19.20s/it, loss=3.02, acc=0, lr=9.99e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  90%|█████████ | 9/10 [02:52<00:19, 19.24s/it, loss=3.02, acc=0, lr=9.99e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training: 100%|██████████| 10/10 [03:12<00:00, 19.23s/it, loss=3.02, acc=0, lr=9.99e-5]
+Epoch 7 - Loss: 2.5063, Accuracy: 0.0000
+Running validation...
+Validation:   0%|          | 0/5 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  20%|██        | 1/5 [00:19<01:18, 19.59s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  40%|████      | 2/5 [00:38<00:58, 19.38s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  60%|██████    | 3/5 [00:58<00:38, 19.30s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  80%|████████  | 4/5 [01:17<00:19, 19.44s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:   0%|          | 0/10 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation - Loss: 2.8609, Accuracy: 0.0000
+
+Epoch 8/50
+Training:  10%|█         | 1/10 [00:19<02:57, 19.71s/it, loss=3.8, acc=0, lr=9.96e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  20%|██        | 2/10 [00:39<02:36, 19.57s/it, loss=3.8, acc=0, lr=9.96e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  30%|███       | 3/10 [00:58<02:16, 19.49s/it, loss=3.8, acc=0, lr=9.96e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  40%|████      | 4/10 [01:18<01:56, 19.48s/it, loss=3.8, acc=0, lr=9.96e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  50%|█████     | 5/10 [01:37<01:37, 19.47s/it, loss=3.8, acc=0, lr=9.96e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  60%|██████    | 6/10 [01:56<01:17, 19.38s/it, loss=3.8, acc=0, lr=9.96e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  70%|███████   | 7/10 [02:15<00:57, 19.31s/it, loss=3.8, acc=0, lr=9.96e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  80%|████████  | 8/10 [02:35<00:38, 19.32s/it, loss=3.8, acc=0, lr=9.96e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  90%|█████████ | 9/10 [02:55<00:19, 19.51s/it, loss=3.8, acc=0, lr=9.96e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training: 100%|██████████| 10/10 [03:14<00:00, 19.48s/it, loss=3.8, acc=0, lr=9.96e-5]
+Epoch 8 - Loss: 2.8563, Accuracy: 0.0000
+Running validation...
+Validation:   0%|          | 0/5 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  20%|██        | 1/5 [00:19<01:19, 19.96s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  40%|████      | 2/5 [00:39<00:58, 19.57s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  60%|██████    | 3/5 [00:58<00:38, 19.41s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  80%|████████  | 4/5 [01:17<00:19, 19.32s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:   0%|          | 0/10 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation - Loss: 3.9094, Accuracy: 0.0000
+
+Epoch 9/50
+Training:  10%|█         | 1/10 [00:19<02:55, 19.47s/it, loss=1.03, acc=0, lr=9.9e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  20%|██        | 2/10 [00:38<02:34, 19.35s/it, loss=1.03, acc=0, lr=9.9e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  30%|███       | 3/10 [00:58<02:16, 19.56s/it, loss=1.03, acc=0, lr=9.9e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  40%|████      | 4/10 [01:17<01:56, 19.46s/it, loss=1.03, acc=0, lr=9.9e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  50%|█████     | 5/10 [01:36<01:36, 19.24s/it, loss=1.03, acc=0, lr=9.9e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  60%|██████    | 6/10 [01:55<01:16, 19.20s/it, loss=1.03, acc=0, lr=9.9e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  70%|███████   | 7/10 [02:15<00:57, 19.22s/it, loss=1.03, acc=0, lr=9.9e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  80%|████████  | 8/10 [02:34<00:38, 19.27s/it, loss=1.03, acc=0, lr=9.9e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  90%|█████████ | 9/10 [02:53<00:19, 19.32s/it, loss=1.03, acc=0, lr=9.9e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training: 100%|██████████| 10/10 [03:13<00:00, 19.35s/it, loss=1.03, acc=0, lr=9.9e-5]
+Epoch 9 - Loss: 2.5172, Accuracy: 0.0000
+Running validation...
+Validation:   0%|          | 0/5 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  20%|██        | 1/5 [00:19<01:18, 19.73s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  40%|████      | 2/5 [00:39<00:58, 19.52s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  60%|██████    | 3/5 [00:58<00:38, 19.46s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  80%|████████  | 4/5 [01:18<00:19, 19.59s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:   0%|          | 0/10 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation - Loss: 3.0266, Accuracy: 0.0000
+
+Epoch 10/50
+Training:  10%|█         | 1/10 [00:19<02:57, 19.73s/it, loss=2.55, acc=0, lr=9.83e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  20%|██        | 2/10 [00:39<02:36, 19.53s/it, loss=2.55, acc=0, lr=9.83e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  30%|███       | 3/10 [00:58<02:16, 19.46s/it, loss=2.55, acc=0, lr=9.83e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  40%|████      | 4/10 [01:17<01:56, 19.37s/it, loss=2.55, acc=0, lr=9.83e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  50%|█████     | 5/10 [01:37<01:37, 19.42s/it, loss=2.55, acc=0, lr=9.83e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  60%|██████    | 6/10 [01:56<01:17, 19.45s/it, loss=2.55, acc=0, lr=9.83e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  70%|███████   | 7/10 [02:15<00:58, 19.38s/it, loss=2.55, acc=0, lr=9.83e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  80%|████████  | 8/10 [02:35<00:39, 19.52s/it, loss=2.55, acc=0, lr=9.83e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  90%|█████████ | 9/10 [02:55<00:19, 19.45s/it, loss=2.55, acc=0, lr=9.83e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training: 100%|██████████| 10/10 [03:14<00:00, 19.47s/it, loss=2.55, acc=0, lr=9.83e-5]
+Epoch 10 - Loss: 2.7820, Accuracy: 0.0000
+Running validation...
+Validation:   0%|          | 0/5 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  20%|██        | 1/5 [00:19<01:18, 19.67s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  40%|████      | 2/5 [00:38<00:58, 19.44s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  60%|██████    | 3/5 [00:58<00:38, 19.32s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  80%|████████  | 4/5 [01:17<00:19, 19.26s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:   0%|          | 0/10 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation - Loss: 3.1375, Accuracy: 0.0000
+
+Epoch 11/50
+Training:  10%|█         | 1/10 [00:19<02:56, 19.64s/it, loss=1.68, acc=0, lr=9.73e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  20%|██        | 2/10 [00:38<02:34, 19.31s/it, loss=1.68, acc=0, lr=9.73e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  30%|███       | 3/10 [00:58<02:16, 19.43s/it, loss=1.68, acc=0, lr=9.73e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  40%|████      | 4/10 [01:17<01:55, 19.33s/it, loss=1.68, acc=0, lr=9.73e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  50%|█████     | 5/10 [01:36<01:36, 19.27s/it, loss=1.68, acc=0, lr=9.73e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  60%|██████    | 6/10 [01:55<01:16, 19.21s/it, loss=1.68, acc=0, lr=9.73e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  70%|███████   | 7/10 [02:14<00:57, 19.09s/it, loss=1.68, acc=0, lr=9.73e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  80%|████████  | 8/10 [02:33<00:38, 19.11s/it, loss=1.68, acc=0, lr=9.73e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  90%|█████████ | 9/10 [02:53<00:19, 19.40s/it, loss=1.68, acc=0, lr=9.73e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training: 100%|██████████| 10/10 [03:13<00:00, 19.33s/it, loss=1.68, acc=0, lr=9.73e-5]
+Epoch 11 - Loss: 2.7242, Accuracy: 0.0000
+Running validation...
+Validation:   0%|          | 0/5 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  20%|██        | 1/5 [00:19<01:19, 19.85s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  40%|████      | 2/5 [00:39<00:59, 19.70s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  60%|██████    | 3/5 [00:59<00:39, 19.66s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation:  80%|████████  | 4/5 [01:18<00:19, 19.54s/it]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:   0%|          | 0/10 [00:00<?, ?it/s]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Validation - Loss: 2.3109, Accuracy: 0.0000
+
+Epoch 12/50
+Training:  10%|█         | 1/10 [00:19<02:55, 19.46s/it, loss=2.84, acc=0, lr=9.61e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  20%|██        | 2/10 [00:38<02:33, 19.21s/it, loss=2.84, acc=0, lr=9.61e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  30%|███       | 3/10 [00:57<02:14, 19.17s/it, loss=2.84, acc=0, lr=9.61e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  40%|████      | 4/10 [01:16<01:55, 19.17s/it, loss=2.84, acc=0, lr=9.61e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  50%|█████     | 5/10 [01:35<01:35, 19.13s/it, loss=2.84, acc=0, lr=9.61e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  60%|██████    | 6/10 [01:55<01:16, 19.14s/it, loss=2.84, acc=0, lr=9.61e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  70%|███████   | 7/10 [02:14<00:57, 19.16s/it, loss=2.84, acc=0, lr=9.61e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  80%|████████  | 8/10 [02:33<00:38, 19.31s/it, loss=2.84, acc=0, lr=9.61e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+Training:  90%|█████████ | 9/10 [02:52<00:19, 19.25s/it, loss=2.84, acc=0, lr=9.61e-5]Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.

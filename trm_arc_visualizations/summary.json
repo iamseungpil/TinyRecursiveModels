@@ -1,0 +1,18 @@
+{
+  "checkpoint": "/data/trm/checkpoints/pretrain_att_arc1concept_4/step_518071",
+  "step": 518071,
+  "total_evaluated": 400,
+  "num_solved": 172,
+  "num_unsolved": 228,
+  "accuracy": 0.43,
+  "solved_task_ids": [
+    "50a16a69",
+    "66e6c45b",
+    "a59b95c0"
+  ],
+  "unsolved_task_ids": [
+    "17cae0c1",
+    "fafd9572",
+    "a57f2f04"
+  ]
+}

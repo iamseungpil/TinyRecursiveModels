@@ -154,14 +154,18 @@ def convert_single_arc_puzzle(results: dict, name: str, puzzle: dict, aug_count:
         if len(group) < aug_count + 1:
             print (f"[Puzzle {name}] augmentation not full, only {len(group)}")
 
-    # Append
+    # Append to results
     for dest in dests:
-        # Convert the examples
         dest_split, dest_set = dest
-
         results.setdefault(dest_split, {})
         results[dest_split].setdefault(dest_set, [])
-        results[dest_split][dest_set].append([converted[dest] for converted in group])
+
+        # Train: add all augmented puzzles
+        # Test: add only original puzzle (group[0]) to avoid evaluation distribution skew
+        if dest_split == "train":
+            results[dest_split][dest_set].append([converted[dest] for converted in group])
+        else:  # test
+            results[dest_split][dest_set].append([group[0][dest]])
 
 
 def load_puzzles_arcagi(config: DataProcessConfig):

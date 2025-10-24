@@ -1,0 +1,15 @@
+{"time":"2025-10-10T23:44:49.663202364+09:00","level":"INFO","msg":"stream: starting","core version":"0.19.9","symlink path":"/home/ubuntu/TinyRecursiveModels/gpt-integration/wandb/run-20251010_234449-ecez1csb/logs/debug-core.log"}
+{"time":"2025-10-10T23:44:50.183319129+09:00","level":"INFO","msg":"created new stream","id":"ecez1csb"}
+{"time":"2025-10-10T23:44:50.183387717+09:00","level":"INFO","msg":"stream: started","id":"ecez1csb"}
+{"time":"2025-10-10T23:44:50.183424205+09:00","level":"INFO","msg":"writer: Do: started","stream_id":"ecez1csb"}
+{"time":"2025-10-10T23:44:50.183471002+09:00","level":"INFO","msg":"handler: started","stream_id":"ecez1csb"}
+{"time":"2025-10-10T23:44:50.183499665+09:00","level":"INFO","msg":"sender: started","stream_id":"ecez1csb"}
+{"time":"2025-10-10T23:44:50.645827555+09:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-10-10T23:44:51.578214946+09:00","level":"INFO","msg":"stream: closing","id":"ecez1csb"}
+{"time":"2025-10-10T23:44:51.578266272+09:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-10-10T23:44:51.578392057+09:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-10-10T23:44:52.672252619+09:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-10-10T23:44:53.034628807+09:00","level":"INFO","msg":"handler: closed","stream_id":"ecez1csb"}
+{"time":"2025-10-10T23:44:53.034653704+09:00","level":"INFO","msg":"writer: Close: closed","stream_id":"ecez1csb"}
+{"time":"2025-10-10T23:44:53.034681184+09:00","level":"INFO","msg":"sender: closed","stream_id":"ecez1csb"}
+{"time":"2025-10-10T23:44:53.034720779+09:00","level":"INFO","msg":"stream: closed","id":"ecez1csb"}

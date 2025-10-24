@@ -1,0 +1,58 @@
+
+🔄 Epoch 1/1
+Traceback (most recent call last):
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 339, in <module>
+    main()
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 335, in main
+    train(config)
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 287, in train
+    metrics, carry = train_step(
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 171, in train_step
+    carry, loss, metrics, _, _ = model(carry=carry, batch=batch, return_keys=[])
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/losses.py", line 58, in forward
+    new_carry, outputs = self.model(**model_kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm.py", line 259, in forward
+    new_inner_carry, logits, (q_halt_logits, q_continue_logits) = self.inner(new_inner_carry, new_current_data)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm.py", line 211, in forward
+    z_L = self.L_level(z_L, z_H + input_embeddings, **seq_info)
+RuntimeError: The size of tensor a (916) must match the size of tensor b (900) at non-singleton dimension 1
+Traceback (most recent call last):
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 339, in <module>
+    main()
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 335, in main
+    train(config)
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 287, in train
+    metrics, carry = train_step(
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/trm_pretrain/train_trm.py", line 171, in train_step
+    carry, loss, metrics, _, _ = model(carry=carry, batch=batch, return_keys=[])
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/losses.py", line 58, in forward
+    new_carry, outputs = self.model(**model_kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm.py", line 259, in forward
+    new_inner_carry, logits, (q_halt_logits, q_continue_logits) = self.inner(new_inner_carry, new_current_data)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm.py", line 211, in forward
+    z_L = self.L_level(z_L, z_H + input_embeddings, **seq_info)
+RuntimeError: The size of tensor a (916) must match the size of tensor b (900) at non-singleton dimension 1

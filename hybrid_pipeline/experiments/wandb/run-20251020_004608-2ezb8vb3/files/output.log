@@ -1,0 +1,28 @@
+
+🚀 Starting joint training...
+
+📖 Epoch 1/10
+Traceback (most recent call last):
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/experiments/run_joint_training.py", line 1001, in <module>
+    main()
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/experiments/run_joint_training.py", line 997, in main
+    train(config)
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/experiments/run_joint_training.py", line 728, in train
+    metrics = train_step(model, batch, optimizer, step, precomputed_embeddings)
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/experiments/run_joint_training.py", line 538, in train_step
+    z_H = z_H.to(device=device, dtype=model.trm.model.dtype)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1940, in __getattr__
+    raise AttributeError(
+AttributeError: 'TinyRecursiveReasoningModel_ACTV1' object has no attribute 'dtype'. Did you mean: 'type'?
+Traceback (most recent call last):
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/experiments/run_joint_training.py", line 1001, in <module>
+    main()
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/experiments/run_joint_training.py", line 997, in main
+    train(config)
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/experiments/run_joint_training.py", line 728, in train
+    metrics = train_step(model, batch, optimizer, step, precomputed_embeddings)
+  File "/home/ubuntu/TinyRecursiveModels/hybrid_pipeline/experiments/run_joint_training.py", line 538, in train_step
+    z_H = z_H.to(device=device, dtype=model.trm.model.dtype)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1940, in __getattr__
+    raise AttributeError(
+AttributeError: 'TinyRecursiveReasoningModel_ACTV1' object has no attribute 'dtype'. Did you mean: 'type'?

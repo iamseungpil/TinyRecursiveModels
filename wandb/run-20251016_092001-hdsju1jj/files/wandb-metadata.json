@@ -1,0 +1,26 @@
+{
+  "os": "Linux-5.15.0-141-generic-x86_64-with-glibc2.35",
+  "python": "CPython 3.10.14",
+  "startedAt": "2025-10-16T00:20:01.703394Z",
+  "args": [
+    "arch=trm",
+    "data_paths=[/data/arc1concept-aug-1000]",
+    "arch.L_layers=2",
+    "arch.H_cycles=3",
+    "arch.L_cycles=4",
+    "+run_name=pretrain_att_arc1concept_4",
+    "+checkpoint_path=/data/trm/checkpoints/pretrain_att_arc1concept_4",
+    "ema=True"
+  ],
+  "program": "/home/ubuntu/TinyRecursiveModels/pretrain.py",
+  "codePath": "pretrain.py",
+  "git": {
+    "remote": "https://github.com/iamseungpil/TinyRecursiveModels.git",
+    "commit": "e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9"
+  },
+  "email": "iamseungpil@gmail.com",
+  "root": "/home/ubuntu/TinyRecursiveModels",
+  "host": "gpu-1",
+  "executable": "/data/miniforge3/bin/python",
+  "codePathLocal": "pretrain.py"
+}

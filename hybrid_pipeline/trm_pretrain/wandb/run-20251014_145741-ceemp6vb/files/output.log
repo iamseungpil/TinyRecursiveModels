@@ -1,0 +1,12 @@
+
+🔄 Epoch 1/1
+Step 10/96.0: loss=87.1384, lr=1.00e-06
+Step 20/96.0: loss=81.3252, lr=2.00e-06
+Step 30/96.0: loss=82.3012, lr=3.00e-06
+Step 40/96.0: loss=78.9658, lr=4.00e-06
+Step 50/96.0: loss=73.4365, lr=5.00e-06
+Step 60/96.0: loss=71.2369, lr=6.00e-06
+Step 70/96.0: loss=65.7808, lr=7.00e-06
+Step 80/96.0: loss=64.8231, lr=8.00e-06
+Step 90/96.0: loss=54.2901, lr=9.00e-06
+💾 Checkpoint saved: /data/trm/pretrain/checkpoint_step_91.pt
