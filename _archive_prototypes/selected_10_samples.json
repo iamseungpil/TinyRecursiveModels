@@ -1,0 +1,62 @@
+[
+  {
+    "index": 3,
+    "task_id": "helmholtz_99b1bc43_1120",
+    "program": "(lambda (ic_connectX $0))",
+    "primitive": "ic_connectX"
+  },
+  {
+    "index": 4,
+    "task_id": "helmholtz_39e1d7f9_5808",
+    "program": "(lambda (rot270 $0))",
+    "primitive": "rot270"
+  },
+  {
+    "index": 0,
+    "task_id": "helmholtz_82819916_2096",
+    "program": "(lambda (gravity_left $0))",
+    "primitive": "gravity_left"
+  },
+  {
+    "index": 50,
+    "task_id": "helmholtz_d9f24cd1_6224",
+    "program": "(lambda (flipx $0))",
+    "primitive": "flipx"
+  },
+  {
+    "index": 19,
+    "task_id": "helmholtz_99fa7670_3824",
+    "program": "(lambda (mirrorX $0))",
+    "primitive": "mirrorX"
+  },
+  {
+    "index": 2,
+    "task_id": "helmholtz_6aa20dc0_4320",
+    "program": "(lambda (ic_erasecol c1 $0))",
+    "primitive": "ic_erasecol"
+  },
+  {
+    "index": 9,
+    "task_id": "helmholtz_150deff5_7392",
+    "program": "(lambda (ic_fill $0))",
+    "primitive": "ic_fill"
+  },
+  {
+    "index": 47,
+    "task_id": "helmholtz_3906de3d_7376",
+    "program": "(lambda (gravity_down $0))",
+    "primitive": "gravity_down"
+  },
+  {
+    "index": 85,
+    "task_id": "helmholtz_f9012d9b_8048",
+    "program": "(lambda (flipy $0))",
+    "primitive": "flipy"
+  },
+  {
+    "index": 136,
+    "task_id": "helmholtz_53b68214_3216",
+    "program": "(lambda (ic_center $0))",
+    "primitive": "ic_center"
+  }
+]
