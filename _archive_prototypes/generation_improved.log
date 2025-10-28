@@ -1,0 +1,237 @@
+/data/miniforge3/lib/python3.10/site-packages/transformers/utils/hub.py:111: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed, we will default to dequantizing the model to bf16
+Registered 81 total primitives.
+================================================================================
+IMPROVED GENERATION: 10+10 SAMPLES WITH RETRY LOGIC
+================================================================================
+
+Improvements:
+- max_new_tokens: 4096 (was 1024)
+- temperature: 0.3 (was 0.7)
+- Retry logic: Up to 3 attempts
+- Multiple in-context examples (1-step, 2-step, 3-step)
+- Explicit channel switching instructions
+================================================================================
+
+Loading GPT-OSS model...
+Using device: cuda
+Loading checkpoint shards:   0%|          | 0/3 [00:00<?, ?it/s]Loading checkpoint shards:  33%|███▎      | 1/3 [00:03<00:07,  3.93s/it]Loading checkpoint shards:  67%|██████▋   | 2/3 [00:05<00:02,  2.62s/it]Loading checkpoint shards: 100%|██████████| 3/3 [00:08<00:00,  2.87s/it]Loading checkpoint shards: 100%|██████████| 3/3 [00:08<00:00,  2.94s/it]
+✓ Model loaded
+
+================================================================================
+SAMPLE 1/10: ic_connectX
+================================================================================
+
+TYPE 1: Generating plan for correct DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 1 Response (1 attempts, success):
+  **Step 1:** Locate each pair of separate horizontal blocks that share the same non‑zero color.  
+**Step 2:** For every such pair, replace every zero cell that lies directly between the two blocks (in ...
+
+TYPE 2: Generating correction for wrong DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 2 Response (1 attempts, success):
+  **Incorrect transformation:** The program rotated the grid 270° clockwise, which moved the 5‑blocks to the right side and misplaced the 1 and 4 cells.
+
+**Step 1:** Locate every pair of separate horizo...
+
+================================================================================
+SAMPLE 2/10: rot270
+================================================================================
+
+TYPE 1: Generating plan for correct DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 1 Response (1 attempts, success):
+  **Step 1:** Rotate the entire grid 270 degrees clockwise (equivalent to a 90‑degree counter‑clockwise rotation).  
+
+The resulting grid is the original pattern turned so that its rows become columns in...
+
+TYPE 2: Generating correction for wrong DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 2 Response (1 attempts, success):
+  **Incorrect transformation:** The program performed a horizontal flip (mirror) of the grid, swapping left and right sides.  
+**Correct steps:**  
+**Step 1:** Rotate the entire grid 270 degrees clockwi...
+
+================================================================================
+SAMPLE 3/10: gravity_left
+================================================================================
+
+TYPE 1: Generating plan for correct DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 1 Response (1 attempts, success):
+  **Step 1:** Shift every non‑zero cell in each row as far left as possible, keeping the original left‑to‑right order.  
+**Step 2:** Leave all remaining cells as zero.  
+
+The grid now has all colored ce...
+
+TYPE 2: Generating correction for wrong DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 2 Response (1 attempts, success):
+  **Incorrect transformation:** The program applied gravity_right, moving all non‑zero cells to the far right of each row.  
+**Step 1:** Identify all non‑zero cells in each row.  
+**Step 2:** Shift thos...
+
+================================================================================
+SAMPLE 4/10: flipx
+================================================================================
+
+TYPE 1: Generating plan for correct DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 1 Response (1 attempts, success):
+  **Step 1:** Mirror the entire grid horizontally, swapping left and right sides while preserving all cell colors.  
+
+The output grid is the horizontal reflection of the input....
+
+TYPE 2: Generating correction for wrong DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 2 Response (1 attempts, success):
+  **Incorrect transformation:** The program mirrored the grid vertically (flipy), swapping the top and bottom halves instead of swapping left and right.  
+**Step 1:** Identify the target color (6) in th...
+
+================================================================================
+SAMPLE 5/10: mirrorX
+================================================================================
+
+TYPE 1: Generating plan for correct DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 1 Response (1 attempts, success):
+  **Step 1:** Mirror the entire grid horizontally, swapping left and right sides while preserving all cell colors.  
+
+The resulting grid is the horizontal reflection of the original....
+
+TYPE 2: Generating correction for wrong DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 2 Response (1 attempts, success):
+  **Incorrect transformation:** The program performed a simple horizontal flip, swapping the 3 and 4 cells but keeping the grid the same width.
+
+**Step 1:** Locate every non‑zero cell in the input grid....
+
+================================================================================
+SAMPLE 6/10: ic_erasecol
+================================================================================
+
+TYPE 1: Generating plan for correct DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 1 Response (1 attempts, success):
+  **Step 1:** Locate every cell in the grid that contains the specified color c1.  
+**Step 2:** Replace each of those cells with black (0), leaving all other cells unchanged.  
+The resulting grid has al...
+
+TYPE 2: Generating correction for wrong DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 2 Response (1 attempts, success):
+  **Incorrect transformation:** The program applied gravity_left, shifting all colored cells to the left instead of removing a specific color.  
+**Step 1:** Locate every cell that contains the target va...
+
+================================================================================
+SAMPLE 7/10: ic_fill
+================================================================================
+
+TYPE 1: Generating plan for correct DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 1 Response (1 attempts, success):
+  **Step 1:** Detect every connected region of 1’s in the grid.  
+**Step 2:** For each detected region, locate any 9‑cells that are completely surrounded by that region and change them to 1.  
+
+The resu...
+
+TYPE 2: Generating correction for wrong DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 2 Response (1 attempts, success):
+  **Incorrect transformation:** The program used `ic_center`, which centers the colored pattern instead of filling its interior.
+
+**Step 1:** Identify all cells that belong to the colored region (values...
+
+================================================================================
+SAMPLE 8/10: gravity_down
+================================================================================
+
+TYPE 1: Generating plan for correct DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 1 Response (1 attempts, success):
+  **Step 1:** For each column, collect all non‑zero cells and stack them at the bottom of the column, keeping their original vertical order.  
+**Step 2:** Fill the remaining cells above the stacked bloc...
+
+TYPE 2: Generating correction for wrong DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 2 Response (1 attempts, success):
+  **Incorrect transformation:** The program applied a leftward gravity after flipping the grid, moving all colored cells to the far left instead of downward.
+
+**Step 1:** Identify every non‑zero cell in...
+
+================================================================================
+SAMPLE 9/10: flipy
+================================================================================
+
+TYPE 1: Generating plan for correct DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 1 Response (1 attempts, success):
+  **Step 1:** Flip the entire grid vertically, exchanging the top and bottom rows while keeping each row’s internal order unchanged.  
+
+The transformation simply mirrors the pattern along a horizontal a...
+
+TYPE 2: Generating correction for wrong DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 2 Response (1 attempts, success):
+  **Incorrect transformation:** The program rotated the grid 270° counter‑clockwise instead of mirroring it vertically.  
+**Step 1:** Identify the top‑bottom symmetry axis (the horizontal midline).  
+**...
+
+================================================================================
+SAMPLE 10/10: ic_center
+================================================================================
+
+TYPE 1: Generating plan for correct DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 1 Response (1 attempts, success):
+  **Step 1:** Locate the smallest rectangle that contains all non‑zero cells.  
+**Step 2:** Compute the target center coordinates of the full grid and determine the horizontal and vertical offsets neede...
+
+TYPE 2: Generating correction for wrong DSL...
+  Attempt 1/3...
+  ✓ Valid response on attempt 1
+✓ TYPE 2 Response (1 attempts, success):
+  **Incorrect transformation:** The program applied gravity_down after centering, pushing the pattern to the bottom of the grid instead of leaving it centered.  
+
+**Step 1:** Identify all non‑zero cells...
+
+================================================================================
+GENERATION COMPLETE!
+================================================================================
+
+Results saved to: prototype_10_samples_improved/
+
+=== TYPE 1 Statistics ===
+Success rate: 10/10 (100%)
+Average attempts: 1.0
+First-try success: 10/10
+
+=== TYPE 2 Statistics ===
+Success rate: 10/10 (100%)
+Average attempts: 1.0
+First-try success: 10/10
+
+=== Overall ===
+Total success: 20/20 (100%)
+Improvement vs previous: 6 samples (+30%)

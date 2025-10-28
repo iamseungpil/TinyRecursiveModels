@@ -1,0 +1,13 @@
+{
+  "checkpoint": "/data/trm/pretrain/checkpoint_step_91.pt",
+  "total_evaluated": 100,
+  "num_solved": 0,
+  "num_unsolved": 100,
+  "accuracy": 0.0,
+  "solved_task_ids": [],
+  "unsolved_task_ids": [
+    "helmholtz_82819916_2096",
+    "helmholtz_253bf280_1136",
+    "helmholtz_6aa20dc0_4320"
+  ]
+}

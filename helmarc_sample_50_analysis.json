@@ -1,0 +1,20 @@
+{
+  "sample_index": 50,
+  "type1_correct": {
+    "sample_index": 50,
+    "task_id": "helmholtz_d9f24cd1_6224",
+    "program": "(lambda (flipx $0))",
+    "final_response": "**Step 1:** Flip the grid vertically, swapping the top and bottom rows while keeping each row’s internal order unchanged.  \n\nThe final grid is the vertical reflection of the original.",
+    "attempts": 1,
+    "status": "success"
+  },
+  "type2_wrong": {
+    "sample_index": 50,
+    "task_id": "helmholtz_d9f24cd1_6224",
+    "correct_program": "(lambda (flipx $0))",
+    "wrong_program": "(lambda (flipy $0))",
+    "final_response": "**Incorrect transformation:** The program performed a horizontal flip (flipy), mirroring the grid left‑to‑right, which misplaced the clusters of 6s and produced the wrong arrangement shown in the “INCORRECT Output”.\n\n**Correct transformation:**\n- **Step 1:** Apply a vertical flip (flipx), swapping the top and bottom rows of the grid. This moves the lower cluster of 6s to the top and the upper cluster to the bottom, matching the expected pattern.\n\n*Summary:* The correct operation is a vertical flip (flipx), not a horizontal flip (flipy).",
+    "attempts": 1,
+    "status": "success"
+  }
+}
