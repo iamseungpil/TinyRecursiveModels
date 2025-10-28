@@ -1,0 +1,54 @@
+# Compositional Training Configuration
+# =====================================
+
+# Data
+data_path: "/data/arc/processed"
+output_dir: "/data/trm/compositional_training"
+
+# LLM (frozen for planning only)
+llama_model: "unsloth/gpt-oss-mxfp4-20b"
+llama_device: "cuda"
+llama_frozen: true  # Do not fine-tune LLM
+llama_torch_dtype: "bfloat16"
+
+# TRM (trainable)
+trm_checkpoint: "/data/trm/pretrain/checkpoint_step_5000.pt"  # Pre-trained TRM
+trm_hidden_size: 512
+trm_num_heads: 8
+trm_expansion: 4.0
+trm_H_cycles: 3
+trm_L_cycles: 6
+trm_L_layers: 4
+trm_max_steps_per_instruction: 5  # ACT steps per instruction (not per problem!)
+
+# Adapter (trainable)
+adapter_use_position_embeddings: true
+adapter_use_cross_attention: false  # Can enable for better quality (slower)
+
+# Training
+batch_size: 1  # Must be 1 for compositional approach
+max_attempts: 8  # Max plan refinement attempts per problem
+epochs: 10
+lr: 0.0001  # Learning rate for adapter + TRM
+weight_decay: 0.01
+
+# Instruction Encoding
+instruction_pooling: "mean"  # "mean", "last", or "first"
+instruction_use_encoder_layers: false  # If true, slower but better contextualization
+
+# Monitoring
+use_wandb: true
+wandb_project: "arc-compositional"
+save_interval: 100  # Save checkpoint every N steps
+
+# Device
+device: "cuda"
+
+# Notes:
+# ------
+# 1. LLM is frozen - only adapter and TRM are trained
+# 2. batch_size must be 1 due to variable-length refinement loops
+# 3. trm_max_steps_per_instruction is per instruction, not per problem
+#    (if plan has 5 steps, total TRM steps = 5 * trm_max_steps_per_instruction)
+# 4. Pre-trained TRM checkpoint is strongly recommended
+# 5. instruction_use_encoder_layers=true gives better quality but 10x slower

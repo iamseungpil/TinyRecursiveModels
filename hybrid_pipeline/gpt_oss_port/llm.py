@@ -76,7 +76,8 @@ class TextReasoningModule(nn.Module):
         problem_text: str,
         latent_prefix: Optional[torch.Tensor] = None,
         max_length: int = 2048,
-        use_chat_template: bool = False
+        use_chat_template: bool = False,
+        reasoning_effort: Optional[str] = None,
     ) -> Tuple[dict, Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Tokenize prompt and optionally prepend latent prefix.
@@ -89,6 +90,8 @@ class TextReasoningModule(nn.Module):
             latent_prefix: Optional [hidden_size] tensor to prepend
             max_length: Maximum sequence length
             use_chat_template: Use apply_chat_template (for GPT-OSS compatibility)
+            reasoning_effort: Optional reasoning effort level ("low", "medium", "high")
+                            Only works if model's chat template supports it (e.g., OpenAI o1)
 
         Returns:
             inputs: Tokenized inputs
@@ -100,25 +103,50 @@ class TextReasoningModule(nn.Module):
             messages = [
                 {"role": "user", "content": problem_text}
             ]
-            try:
-                inputs = self.tokenizer.apply_chat_template(
-                    messages,
-                    add_generation_prompt=True,
-                    return_tensors="pt",
-                    return_dict=True,
-                    truncation=True,
-                    max_length=max_length
-                ).to(self.device)
-            except Exception as e:
-                # Fallback to plain tokenization if chat template fails
-                print(f"Warning: apply_chat_template failed ({e}), using plain tokenization")
-                inputs = self.tokenizer(
-                    problem_text,
-                    return_tensors="pt",
-                    padding=True,
-                    truncation=True,
-                    max_length=max_length
-                ).to(self.device)
+
+            # Try with reasoning_effort first (OpenAI o1 style)
+            if reasoning_effort is not None:
+                try:
+                    inputs = self.tokenizer.apply_chat_template(
+                        messages,
+                        add_generation_prompt=True,
+                        return_tensors="pt",
+                        return_dict=True,
+                        truncation=True,
+                        max_length=max_length,
+                        reasoning_effort=reasoning_effort  # Model-specific parameter
+                    ).to(self.device)
+                except TypeError:
+                    # Fallback: model doesn't support reasoning_effort
+                    inputs = self.tokenizer.apply_chat_template(
+                        messages,
+                        add_generation_prompt=True,
+                        return_tensors="pt",
+                        return_dict=True,
+                        truncation=True,
+                        max_length=max_length
+                    ).to(self.device)
+            else:
+                # No reasoning_effort requested
+                try:
+                    inputs = self.tokenizer.apply_chat_template(
+                        messages,
+                        add_generation_prompt=True,
+                        return_tensors="pt",
+                        return_dict=True,
+                        truncation=True,
+                        max_length=max_length
+                    ).to(self.device)
+                except Exception as e:
+                    # Fallback to plain tokenization if chat template fails
+                    print(f"Warning: apply_chat_template failed ({e}), using plain tokenization")
+                    inputs = self.tokenizer(
+                        problem_text,
+                        return_tensors="pt",
+                        padding=True,
+                        truncation=True,
+                        max_length=max_length
+                    ).to(self.device)
         else:
             # Plain tokenization (LLaMA default)
             inputs = self.tokenizer(
@@ -217,11 +245,30 @@ class TextReasoningModule(nn.Module):
         latent_prefix: Optional[torch.Tensor] = None,
         max_length: int = 128,
         use_chat_template: bool = False,
+        reasoning_effort: Optional[str] = None,
         do_sample: bool = False,
         temperature: float = 1.0,
+        top_p: float = 0.9,
         extract_full_sequence: Optional[bool] = None,
     ) -> LatentOutput:
-        """Generate reasoning text and associated latent representations."""
+        """
+        Generate reasoning text and associated latent representations.
+
+        Args:
+            problem_text: Input prompt
+            latent_prefix: Optional latent prefix to prepend
+            max_length: Maximum new tokens to generate
+            use_chat_template: Use apply_chat_template for GPT-OSS compatibility
+            reasoning_effort: Optional reasoning effort level ("low", "medium", "high")
+                            Only effective if model's chat template supports it
+            do_sample: Whether to use sampling (vs greedy)
+            temperature: Sampling temperature
+            top_p: Nucleus sampling threshold
+            extract_full_sequence: Extract full hidden sequence (for cross-attention)
+
+        Returns:
+            LatentOutput: Container with final_hidden, generated_text, and optional sequence
+        """
         prompt_max_length = getattr(self.model.config, "max_position_embeddings", 2048)
 
         need_full_sequence = (
@@ -233,14 +280,19 @@ class TextReasoningModule(nn.Module):
             latent_prefix=latent_prefix,
             max_length=prompt_max_length,
             use_chat_template=use_chat_template,
+            reasoning_effort=reasoning_effort,
         )
 
+        # Generation parameters (following gpt_oss_analyzer.py reference)
         gen_kwargs = dict(
             max_new_tokens=max_length,
             do_sample=do_sample,
             temperature=temperature,
+            top_p=top_p,
             return_dict_in_generate=True,
             output_hidden_states=True,
+            pad_token_id=self.tokenizer.pad_token_id,
+            eos_token_id=self.tokenizer.eos_token_id,
         )
 
         return self._run_generation(
