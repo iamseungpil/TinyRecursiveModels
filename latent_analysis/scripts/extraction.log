@@ -1,0 +1,67 @@
+============================================================
+TRM Latent Extraction
+============================================================
+Checkpoint: /data/trm/pretrain/checkpoint_step_91.pt
+Data: /data/arc1concept-aug-1000/test_puzzles.json
+Device: GPU 4 (CUDA_VISIBLE_DEVICES=4)
+============================================================
+📊 Loaded 1782 problems from 400 tasks
+📥 Loading TRM from /data/trm/pretrain/checkpoint_step_91.pt...
+✓ TRM loaded (hidden_size=512)
+
+🔬 Extracting latents...
+Extracting latents:   0%|          | 0/56 [00:00<?, ?it/s]Extracting latents:   0%|          | 0/56 [00:00<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/ubuntu/TinyRecursiveModels/latent_analysis/scripts/extract_latents.py", line 242, in <module>
+    main()
+  File "/home/ubuntu/TinyRecursiveModels/latent_analysis/scripts/extract_latents.py", line 222, in main
+    results = extract_latents(model, problems, device, batch_size=32)
+  File "/home/ubuntu/TinyRecursiveModels/latent_analysis/scripts/extract_latents.py", line 169, in extract_latents
+    carry, outputs = model(batch_dict)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+TypeError: TinyRecursiveReasoningModel_ACTV1.forward() missing 1 required positional argument: 'batch'
+============================================================
+TRM Latent Extraction
+============================================================
+Checkpoint: /data/trm/pretrain/checkpoint_step_91.pt
+Data: /data/arc1concept-aug-1000/test_puzzles.json
+Device: GPU 4 (CUDA_VISIBLE_DEVICES=4)
+============================================================
+📊 Loaded 1782 problems from 400 tasks
+📥 Loading TRM from /data/trm/pretrain/checkpoint_step_91.pt...
+✓ TRM loaded (hidden_size=512)
+
+🔬 Extracting latents...
+Extracting latents:   0%|          | 0/56 [00:00<?, ?it/s]Extracting latents:   0%|          | 0/56 [00:05<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/ubuntu/TinyRecursiveModels/latent_analysis/scripts/extract_latents.py", line 243, in <module>
+    main()
+  File "/home/ubuntu/TinyRecursiveModels/latent_analysis/scripts/extract_latents.py", line 223, in main
+    results = extract_latents(model, problems, device, batch_size=32)
+  File "/home/ubuntu/TinyRecursiveModels/latent_analysis/scripts/extract_latents.py", line 176, in extract_latents
+    latents = z_H.mean(dim=1).cpu().numpy()  # [B, 512]
+TypeError: Got unsupported ScalarType BFloat16
+============================================================
+TRM Latent Extraction
+============================================================
+Checkpoint: /data/trm/pretrain/checkpoint_step_91.pt
+Data: /data/arc1concept-aug-1000/test_puzzles.json
+Device: GPU 4 (CUDA_VISIBLE_DEVICES=4)
+============================================================
+📊 Loaded 1782 problems from 400 tasks
+📥 Loading TRM from /data/trm/pretrain/checkpoint_step_91.pt...
+✓ TRM loaded (hidden_size=512)
+
+🔬 Extracting latents...
+Extracting latents:   0%|          | 0/56 [00:00<?, ?it/s]Extracting latents:   0%|          | 0/56 [00:03<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/ubuntu/TinyRecursiveModels/latent_analysis/scripts/extract_latents.py", line 243, in <module>
+    main()
+  File "/home/ubuntu/TinyRecursiveModels/latent_analysis/scripts/extract_latents.py", line 223, in main
+    results = extract_latents(model, problems, device, batch_size=32)
+  File "/home/ubuntu/TinyRecursiveModels/latent_analysis/scripts/extract_latents.py", line 179, in extract_latents
+    predictions = outputs['seq_logits'].argmax(dim=-1).cpu().numpy()  # [B, 900]
+KeyError: 'seq_logits'

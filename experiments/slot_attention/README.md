@@ -170,6 +170,15 @@ for i, j in enumerate(same_task_examples):
    - **Problem:** Hungarian algorithm is O(n³)
    - **Solution:** Batch only contains few same-puzzle pairs, overhead minimal
 
+4. **Contrastive Loss Batching** ⚠️ IMPORTANT
+   - **Problem:** Contrastive loss requires ≥2 examples with same puzzle_id in batch
+   - **Impact:** With random sampling, most batches won't have duplicates → loss = 0
+   - **Solutions:**
+     - Use custom sampler that ensures same-puzzle pairs in each batch
+     - Increase batch size to increase probability of duplicates
+     - Use memory bank to store recent slot representations
+   - **Status:** Current implementation uses random sampling (may need improvement)
+
 ## File Structure
 
 ```

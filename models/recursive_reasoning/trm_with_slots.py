@@ -184,6 +184,10 @@ class TRM_WithSlots_Inner(nn.Module):
                 output_dim=self.config.hidden_size,
                 broadcast_size=self.config.seq_len  # Exclude puzzle_emb_len
             )
+        else:
+            # Projection for slot aggregation when decoder is disabled
+            if self.config.slot_dim != self.config.hidden_size:
+                self.slot_proj = nn.Linear(self.config.slot_dim, self.config.hidden_size)
 
         # Initial states
         self.H_init = nn.Buffer(trunc_normal_init_(torch.empty(self.config.hidden_size, dtype=self.forward_dtype), std=1), persistent=True)
@@ -266,11 +270,10 @@ class TRM_WithSlots_Inner(nn.Module):
             output_slots = self.lm_head_slots(slot_features)
         else:
             # Simple aggregation: mean over slots
-            slot_agg = slots.mean(dim=1, keepdim=True).expand(-1, self.config.seq_len, self.config.slot_dim)
+            slot_agg = slots.mean(dim=1, keepdim=True).expand(-1, self.config.seq_len, -1)
             # Project to hidden_size if needed
-            if self.config.slot_dim != self.config.hidden_size:
-                proj = nn.Linear(self.config.slot_dim, self.config.hidden_size).to(slot_agg.device)
-                slot_agg = proj(slot_agg)
+            if hasattr(self, 'slot_proj'):
+                slot_agg = self.slot_proj(slot_agg)
             output_slots = self.lm_head_slots(slot_agg)
 
         # Q-head

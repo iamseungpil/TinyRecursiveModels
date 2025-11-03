@@ -6,6 +6,14 @@ from torch import nn
 import math
 import numpy as np
 
+# Check scipy availability for Hungarian matching
+try:
+    from scipy.optimize import linear_sum_assignment
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
+    linear_sum_assignment = None
+
 IGNORE_LABEL_ID = -100
 
 
@@ -129,6 +137,13 @@ class SlotContrastiveLossHead(nn.Module):
         self.slot_contrastive_weight = slot_contrastive_weight
         self.use_hungarian_matching = use_hungarian_matching
 
+        # Check scipy availability for Hungarian matching
+        if self.use_hungarian_matching and not HAS_SCIPY:
+            raise ImportError(
+                "scipy is required for Hungarian matching. "
+                "Install with: pip install scipy"
+            )
+
     def initial_carry(self, *args, **kwargs):
         return self.model.initial_carry(*args, **kwargs)
 
@@ -143,11 +158,6 @@ class SlotContrastiveLossHead(nn.Module):
         Returns:
             matched_indices: List of (row_idx, col_idx) tuples for each batch element
         """
-        try:
-            from scipy.optimize import linear_sum_assignment
-        except ImportError:
-            raise ImportError("scipy is required for Hungarian matching. Install with: pip install scipy")
-
         B, num_slots, D = slots_1.shape
         matched_indices = []
 
