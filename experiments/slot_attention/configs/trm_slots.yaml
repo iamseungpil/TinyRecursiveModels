@@ -6,7 +6,7 @@ arch:
 
   # Loss configuration
   loss:
-    name: losses@SlotContrastiveLossHead
+    name: slot_losses@SlotContrastiveLossHead
     loss_type: softmax_cross_entropy
     slot_recon_weight: 0.5  # Weight for slot reconstruction loss
     slot_contrastive_weight: 0.1  # Weight for slot contrastive loss

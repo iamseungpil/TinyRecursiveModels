@@ -190,10 +190,16 @@ experiments/slot_attention/
 
 models/
 ├── slot_attention.py                   # Slot Attention module
-├── recursive_reasoning/
-│   └── trm_with_slots.py              # TRM + Slots model
-└── losses.py                           # SlotContrastiveLossHead
+├── slot_losses.py                      # SlotContrastiveLossHead (separate from baseline)
+├── losses.py                           # Baseline loss functions (ACTLossHead)
+└── recursive_reasoning/
+    ├── trm.py                          # Baseline TRM
+    └── trm_with_slots.py               # TRM + Slots model
 ```
+
+**Note**: Slot Attention components are fully separated from baseline TRM:
+- `slot_losses.py` contains slot-specific losses (requires scipy)
+- Baseline TRM users can use `losses.py` without scipy dependency
 
 ## Dependencies
 
