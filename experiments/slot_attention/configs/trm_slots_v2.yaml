@@ -1,0 +1,99 @@
+# Slot Attention + Contrastive Learning Configuration V2
+# Improvements over V1:
+# - num_slots: 8 → 16 (reduce information bottleneck from 87.5% to 75%)
+# - epochs: 200 → 8200 (match baseline training duration)
+# - slot_recon_weight: 0.5 → 1.0 (increase importance of slot reconstruction)
+# - Residual connections already implemented in SlotCrossAttentionDecoder
+
+arch:
+  name: recursive_reasoning.trm_with_slots@TRM_WithSlots_ACTV1
+
+  # Loss configuration
+  loss:
+    name: slot_losses@SlotContrastiveLossHead
+    loss_type: softmax_cross_entropy
+    slot_recon_weight: 1.0  # Increased from 0.5 to emphasize slot reconstruction
+    slot_contrastive_weight: 0.1  # Weight for slot contrastive loss
+    slot_diversity_weight: 0.01  # Weight for diversity loss (prevent slot collapse)
+    use_hungarian_matching: true  # Use Hungarian matching for slot alignment
+
+  # TRM core configuration (same as baseline)
+  halt_exploration_prob: 0.2
+  halt_max_steps: 16
+
+  H_cycles: 16
+  L_cycles: 6
+
+  H_layers: 0
+  L_layers: 2
+
+  hidden_size: 512
+  num_heads: 8
+  expansion: 2.0
+
+  puzzle_emb_ndim: 512  # Match TRM baseline for transfer learning
+  puzzle_emb_len: 64  # Provide more tokens for slot decomposition
+
+  pos_encodings: rope
+  forward_dtype: bfloat16
+
+  mlp_t: true
+  no_ACT_continue: true
+
+  # Slot Attention specific configuration - IMPROVED
+  num_slots: 16  # INCREASED from 8 to reduce information bottleneck (64→16 = 75% compression vs 87.5%)
+  slot_dim: 256  # Dimension of each slot
+  slot_iterations: 3  # Number of iterative refinement steps
+  use_slot_decoder: true  # Use decoder for slot-based reconstruction
+  use_cross_attention_decoder: true  # Use cross-attention with residual connections
+
+# Data configuration
+data_paths:
+  - data/arc1concept-aug-1000
+
+data_paths_test:
+  - data/arc1concept-aug-1000
+
+# Checkpoint path (new directory for V2)
+checkpoint_path: /data/trm_slots_v2_checkpoints
+
+# Training hyperparameters
+global_batch_size: 64
+epochs: 8200  # INCREASED from 200 to match baseline (~8358 epochs)
+
+# Learning rates
+lr: 2.0e-4
+lr_min_ratio: 0.1
+lr_warmup_steps: 1000
+
+weight_decay: 0.01
+beta1: 0.9
+beta2: 0.98
+
+# Puzzle embedding optimizer
+puzzle_emb_lr: 1.0e-3
+puzzle_emb_weight_decay: 0.01
+
+# Evaluation and checkpointing
+eval_interval: 10
+min_eval_interval: 0
+checkpoint_every_eval: true
+
+# WandB logging
+project_name: "TRM-SlotAttention"
+run_name: null  # Auto-generated
+
+# Evaluators (commented out due to YAML serialization issues)
+# evaluators:
+#   - name: evaluators.arc@ARC
+#     submission_K: 2
+#     pass_Ks: [1, 2, 5, 10]
+#     aggregated_voting: true
+
+# Misc
+seed: 42
+ema: false
+freeze_weights: false
+
+# eval_save_outputs:
+#   - slots  # Save slot representations for analysis (commented out due to YAML serialization issues)

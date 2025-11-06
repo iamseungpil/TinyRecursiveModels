@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from models.common import trunc_normal_init_
 from models.layers import rms_norm, SwiGLU, Attention, RotaryEmbedding, CosSin, CastedEmbedding, CastedLinear
 from models.sparse_embedding import CastedSparseEmbedding
-from models.slot_attention import SlotAttention, SlotDecoder
+from models.slot_attention import SlotAttention, SlotDecoder, SlotCrossAttentionDecoder
 
 IGNORE_LABEL_ID = -100
 
@@ -78,6 +78,8 @@ class TRM_WithSlots_Config(BaseModel):
     slot_dim: int = 256
     slot_iterations: int = 3
     use_slot_decoder: bool = True
+    use_cross_attention_decoder: bool = True  # Use cross-attention (recommended) vs mean pooling
+    slot_input_tokens: int = 32  # Number of tokens to decompose (16 puzzle_emb + 16 first grid)
 
 
 class TRM_WithSlots_Block(nn.Module):
@@ -145,9 +147,9 @@ class TRM_WithSlots_Inner(nn.Module):
 
         self.embed_tokens = CastedEmbedding(self.config.vocab_size, self.config.hidden_size, init_std=embed_init_std, cast_to=self.forward_dtype)
 
-        # Dual prediction heads
-        self.lm_head = CastedLinear(self.config.hidden_size, self.config.vocab_size, bias=False)  # Direct from z_H
-        self.lm_head_slots = CastedLinear(self.config.hidden_size, self.config.vocab_size, bias=False)  # From slots
+        # Shared LM head for both direct and slot paths
+        # This forces slots to improve features rather than learning a different linear map
+        self.lm_head = CastedLinear(self.config.hidden_size, self.config.vocab_size, bias=False)
 
         self.q_head = CastedLinear(self.config.hidden_size, 2, bias=True)
 
@@ -169,25 +171,23 @@ class TRM_WithSlots_Inner(nn.Module):
         # Reasoning Layers
         self.L_level = TRM_WithSlots_ReasoningModule(layers=[TRM_WithSlots_Block(self.config) for _i in range(self.config.L_layers)])
 
-        # Slot Attention
+        # Slot Attention - decomposes puzzle representation into rule slots
         self.slot_attention = SlotAttention(
             num_slots=self.config.num_slots,
             slot_dim=self.config.slot_dim,
             input_dim=self.config.hidden_size,
-            num_iterations=self.config.slot_iterations
+            num_iterations=self.config.slot_iterations,
+            dtype=self.forward_dtype
         )
 
-        # Slot Decoder
-        if self.config.use_slot_decoder:
-            self.slot_decoder = SlotDecoder(
-                slot_dim=self.config.slot_dim,
-                output_dim=self.config.hidden_size,
-                broadcast_size=self.config.seq_len  # Exclude puzzle_emb_len
-            )
-        else:
-            # Projection for slot aggregation when decoder is disabled
-            if self.config.slot_dim != self.config.hidden_size:
-                self.slot_proj = nn.Linear(self.config.slot_dim, self.config.hidden_size)
+        # Slot Expander: Expand slots back to puzzle_emb_len tokens for full context prediction
+        # This creates a compositional representation while preserving full context
+        # Each slot contributes to multiple puzzle positions via learned projection
+        self.slot_expander = CastedLinear(
+            self.config.num_slots * self.config.slot_dim,
+            self.puzzle_emb_len * self.config.hidden_size,
+            bias=True
+        )
 
         # Initial states
         self.H_init = nn.Buffer(trunc_normal_init_(torch.empty(self.config.hidden_size, dtype=self.forward_dtype), std=1), persistent=True)
@@ -258,35 +258,40 @@ class TRM_WithSlots_Inner(nn.Module):
             z_L = self.L_level(z_L, z_H + input_embeddings, **seq_info)
         z_H = self.L_level(z_H, z_L, **seq_info)
 
-        # Slot Attention decomposition
-        slots = self.slot_attention(z_H)  # [B, num_slots, slot_dim]
+        # ==== FIXED ARCHITECTURE: Full Context Prediction ====
+        # 1. Decompose puzzle embedding into compositional slots
+        rule_repr = z_H[:, :self.puzzle_emb_len, :]  # [B, puzzle_emb_len, hidden_size]
+        rule_slots = self.slot_attention(rule_repr)  # [B, num_slots, slot_dim]
 
-        # Direct prediction from z_H
+        # 2. Expand slots back to puzzle_emb_len tokens
+        # This preserves compositional structure while maintaining full context
+        B, num_slots, slot_dim = rule_slots.shape
+        slot_flatten = rule_slots.view(B, -1)  # [B, num_slots * slot_dim]
+        slot_expanded = self.slot_expander(slot_flatten)  # [B, puzzle_emb_len * hidden_size]
+        slot_tokens = slot_expanded.view(B, self.puzzle_emb_len, self.config.hidden_size)
+
+        # 3. Create z_H with slot-based puzzle representation
+        grid_features = z_H[:, self.puzzle_emb_len:, :]  # [B, seq_len - puzzle_emb_len, hidden_size]
+        z_H_with_slots = torch.cat([slot_tokens, grid_features], dim=1)  # [B, seq_len, hidden_size]
+
+        # 4. Predict with FULL CONTEXT (like baseline!)
+        # Direct path: original z_H (no slots)
         output_direct = self.lm_head(z_H)[:, self.puzzle_emb_len:]
 
-        # Slot-based prediction
-        if self.config.use_slot_decoder:
-            slot_features = self.slot_decoder(slots)  # [B, seq_len, hidden_size]
-            output_slots = self.lm_head_slots(slot_features)
-        else:
-            # Simple aggregation: mean over slots
-            slot_agg = slots.mean(dim=1, keepdim=True).expand(-1, self.config.seq_len, -1)
-            # Project to hidden_size if needed
-            if hasattr(self, 'slot_proj'):
-                slot_agg = self.slot_proj(slot_agg)
-            output_slots = self.lm_head_slots(slot_agg)
+        # Slot path: z_H with compositional slot representation
+        output_slots = self.lm_head(z_H_with_slots)[:, self.puzzle_emb_len:]
 
         # Q-head
         q_logits = self.q_head(z_H[:, 0]).to(torch.float32)
 
-        # New carry with slots
+        # New carry with rule slots
         new_carry = TRM_WithSlots_InnerCarry(
             z_H=z_H.detach(),
             z_L=z_L.detach(),
-            slots=slots.detach()
+            slots=rule_slots.detach()
         )
 
-        return new_carry, output_direct, output_slots, slots, (q_logits[..., 0], q_logits[..., 1])
+        return new_carry, output_direct, output_slots, rule_slots, (q_logits[..., 0], q_logits[..., 1])
 
 
 class TRM_WithSlots_ACTV1(nn.Module):

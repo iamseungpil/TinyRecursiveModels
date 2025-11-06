@@ -40,6 +40,7 @@ class SlotContrastiveLossHead(nn.Module):
         loss_type: str,
         slot_recon_weight: float = 0.5,
         slot_contrastive_weight: float = 0.1,
+        slot_diversity_weight: float = 0.01,
         use_hungarian_matching: bool = True
     ):
         super().__init__()
@@ -47,6 +48,7 @@ class SlotContrastiveLossHead(nn.Module):
         self.loss_fn = globals()[loss_type]
         self.slot_recon_weight = slot_recon_weight
         self.slot_contrastive_weight = slot_contrastive_weight
+        self.slot_diversity_weight = slot_diversity_weight
         self.use_hungarian_matching = use_hungarian_matching
 
         # Check scipy availability for Hungarian matching
@@ -59,6 +61,7 @@ class SlotContrastiveLossHead(nn.Module):
     def initial_carry(self, *args, **kwargs):
         return self.model.initial_carry(*args, **kwargs)
 
+    @torch.compiler.disable()
     def hungarian_matching(self, slots_1: torch.Tensor, slots_2: torch.Tensor):
         """
         Find optimal slot assignment using Hungarian algorithm.
@@ -81,73 +84,99 @@ class SlotContrastiveLossHead(nn.Module):
                 dim=-1
             ).squeeze(0)  # [num_slots, num_slots]
 
-            # Hungarian algorithm
-            row_idx, col_idx = linear_sum_assignment(cost_matrix.cpu().numpy())
+            # Hungarian algorithm (detach for numpy, matching is not differentiable)
+            # Convert to float32 since scipy doesn't support bfloat16
+            row_idx, col_idx = linear_sum_assignment(cost_matrix.detach().cpu().float().numpy())
             matched_indices.append((row_idx, col_idx))
 
         return matched_indices
 
-    def compute_slot_contrastive_loss(self, carry, slots: torch.Tensor):
+    def compute_slot_contrastive_loss(self, carry, slots: torch.Tensor, temperature: float = 0.07):
         """
-        Compute contrastive loss between slots of same puzzle.
+        Compute slot-level contrastive loss with InfoNCE.
 
         Strategy:
-        - Group examples by puzzle_id in the batch
-        - For same puzzle_id, compute pairwise slot similarity with optional Hungarian matching
-        - Maximize similarity between matched slots
+        - For each pair of examples in batch, use Hungarian matching to find semantic slot alignment
+        - Matched slots = positive pairs (same semantic meaning across different puzzles)
+        - Non-matched slots = negative pairs (different semantic meanings)
+        - Apply InfoNCE loss: -log(exp(pos/τ) / (exp(pos/τ) + Σexp(neg/τ)))
+
+        This encourages:
+        1. Slots with same semantics (e.g., "rotation") to be similar across all puzzles
+        2. Slots with different semantics (e.g., "rotation" vs "mirroring") to be dissimilar
 
         Args:
-            carry: Model carry with current_data containing puzzle_identifiers
+            carry: Model carry (not used but kept for interface compatibility)
             slots: [B, num_slots, slot_dim]
+            temperature: Temperature parameter for InfoNCE loss (default: 0.07)
 
         Returns:
             Contrastive loss (scalar tensor)
         """
-        puzzle_ids = carry.current_data["puzzle_identifiers"]  # [B]
         B, num_slots, D = slots.shape
+
+        if B < 2:
+            # Need at least 2 examples for contrastive learning
+            return torch.tensor(0.0, device=slots.device)
 
         total_loss = 0.0
         count = 0
 
-        # Find pairs of same puzzle_id in batch
-        unique_ids = torch.unique(puzzle_ids)
+        # For each pair of examples
+        for i in range(B):
+            for j in range(i+1, B):
+                slots_i = slots[i:i+1]  # [1, num_slots, D]
+                slots_j = slots[j:j+1]  # [1, num_slots, D]
 
-        for puzzle_id in unique_ids:
-            mask = (puzzle_ids == puzzle_id)
-            indices = torch.where(mask)[0]
+                if self.use_hungarian_matching:
+                    # Hungarian matching to find semantic alignment
+                    matched = self.hungarian_matching(slots_i, slots_j)[0]
+                    row_idx, col_idx = matched
 
-            if len(indices) < 2:
-                continue  # Need at least 2 examples
+                    # For each matched slot pair
+                    for k in range(num_slots):
+                        anchor = slots_i[0, row_idx[k]]  # [D]
+                        positive = slots_j[0, col_idx[k]]  # [D] - matched slot
 
-            # Pairwise contrastive
-            for i in range(len(indices)):
-                for j in range(i+1, len(indices)):
-                    idx1, idx2 = indices[i].item(), indices[j].item()
+                        # Negatives: all OTHER slots from example j
+                        negative_mask = torch.ones(num_slots, dtype=torch.bool, device=slots.device)
+                        negative_mask[col_idx[k]] = False
+                        negatives = slots_j[0, negative_mask]  # [num_slots-1, D]
 
-                    slots_1 = slots[idx1:idx1+1]  # [1, num_slots, D]
-                    slots_2 = slots[idx2:idx2+1]  # [1, num_slots, D]
+                        # Compute similarities
+                        pos_sim = F.cosine_similarity(anchor.unsqueeze(0), positive.unsqueeze(0), dim=1) / temperature
+                        neg_sims = F.cosine_similarity(anchor.unsqueeze(0), negatives, dim=1) / temperature  # [num_slots-1]
 
-                    if self.use_hungarian_matching:
-                        # Hungarian matching
-                        matched = self.hungarian_matching(slots_1, slots_2)[0]
-                        row_idx, col_idx = matched
+                        # InfoNCE loss
+                        logits = torch.cat([pos_sim, neg_sims])  # [num_slots]
+                        labels = torch.zeros(1, dtype=torch.long, device=slots.device)  # Positive is index 0
+                        loss = F.cross_entropy(logits.unsqueeze(0), labels)
 
-                        # Matched slots should be similar
-                        for r, c in zip(row_idx, col_idx):
-                            sim = F.cosine_similarity(
-                                slots_1[0, r], slots_2[0, c], dim=0
-                            )
-                            total_loss += -sim  # Maximize similarity = minimize negative similarity
-                            count += 1
-                    else:
-                        # Simple pairwise similarity without matching
-                        # Assume slot order is already aligned
-                        for s in range(num_slots):
-                            sim = F.cosine_similarity(
-                                slots_1[0, s], slots_2[0, s], dim=0
-                            )
-                            total_loss += -sim
-                            count += 1
+                        total_loss += loss
+                        count += 1
+                else:
+                    # Without Hungarian matching, assume slot order is aligned
+                    # Still use InfoNCE loss for proper negative sampling
+                    for k in range(num_slots):
+                        anchor = slots_i[0, k]  # [D]
+                        positive = slots_j[0, k]  # [D] - aligned slot
+
+                        # Negatives: all OTHER slots from example j
+                        negative_mask = torch.ones(num_slots, dtype=torch.bool, device=slots.device)
+                        negative_mask[k] = False
+                        negatives = slots_j[0, negative_mask]  # [num_slots-1, D]
+
+                        # Compute similarities
+                        pos_sim = F.cosine_similarity(anchor.unsqueeze(0), positive.unsqueeze(0), dim=1) / temperature
+                        neg_sims = F.cosine_similarity(anchor.unsqueeze(0), negatives, dim=1) / temperature
+
+                        # InfoNCE loss
+                        logits = torch.cat([pos_sim, neg_sims])
+                        labels = torch.zeros(1, dtype=torch.long, device=slots.device)
+                        loss = F.cross_entropy(logits.unsqueeze(0), labels)
+
+                        total_loss += loss
+                        count += 1
 
         if count > 0:
             total_loss = total_loss / count
@@ -155,6 +184,38 @@ class SlotContrastiveLossHead(nn.Module):
             total_loss = torch.tensor(0.0, device=slots.device)
 
         return total_loss
+
+    def compute_slot_diversity_loss(self, slots: torch.Tensor):
+        """
+        Encourage diversity among slots to prevent slot collapse.
+
+        Penalizes high pairwise similarity between different slots within same example.
+        This prevents all slots from converging to the same representation.
+
+        Args:
+            slots: [B, num_slots, slot_dim]
+
+        Returns:
+            Diversity loss (scalar) - lower is more diverse
+        """
+        B, K, D = slots.shape
+
+        # Normalize slots for cosine similarity
+        slots_norm = F.normalize(slots, dim=-1, p=2)  # [B, K, D]
+
+        # Compute pairwise cosine similarity within each batch
+        # similarity[b, i, j] = cosine_similarity(slots[b, i], slots[b, j])
+        similarity = torch.einsum('bkd,bqd->bkq', slots_norm, slots_norm)  # [B, K, K]
+
+        # Mask out diagonal (self-similarity = 1.0)
+        mask = torch.eye(K, device=slots.device, dtype=torch.bool)
+        similarity_off_diag = similarity.masked_fill(mask, 0.0)
+
+        # Penalize high off-diagonal similarity
+        # Mean absolute similarity (excluding diagonal)
+        diversity_loss = similarity_off_diag.abs().sum() / (B * K * (K - 1))
+
+        return diversity_loss
 
     def forward(
         self,
@@ -187,19 +248,24 @@ class SlotContrastiveLossHead(nn.Module):
             valid_metrics = new_carry.halted & (loss_counts > 0)
 
         # 1. Direct LM loss
-        lm_loss_direct = (self.loss_fn(logits_direct, labels, ignore_index=IGNORE_LABEL_ID, valid_mask=mask) / loss_divisor).sum()
+        lm_loss_direct = (self.loss_fn(logits_direct, labels, ignore_index=IGNORE_LABEL_ID) / loss_divisor).sum()
 
         # 2. Slot reconstruction loss
         lm_loss_slots = torch.tensor(0.0, device=logits_direct.device)
         if logits_slots is not None:
-            lm_loss_slots = (self.loss_fn(logits_slots, labels, ignore_index=IGNORE_LABEL_ID, valid_mask=mask) / loss_divisor).sum()
+            lm_loss_slots = (self.loss_fn(logits_slots, labels, ignore_index=IGNORE_LABEL_ID) / loss_divisor).sum()
 
         # 3. Slot contrastive loss
         slot_contrastive_loss = torch.tensor(0.0, device=logits_direct.device)
         if slots is not None and self.slot_contrastive_weight > 0:
             slot_contrastive_loss = self.compute_slot_contrastive_loss(new_carry, slots)
 
-        # 4. Q-learning losses
+        # 4. Slot diversity loss (prevent slot collapse)
+        slot_diversity_loss = torch.tensor(0.0, device=logits_direct.device)
+        if slots is not None and self.slot_diversity_weight > 0:
+            slot_diversity_loss = self.compute_slot_diversity_loss(slots)
+
+        # 5. Q-learning losses
         q_halt_loss = F.binary_cross_entropy_with_logits(
             outputs["q_halt_logits"],
             seq_is_correct.to(outputs["q_halt_logits"].dtype),
@@ -219,6 +285,7 @@ class SlotContrastiveLossHead(nn.Module):
             lm_loss_direct +
             self.slot_recon_weight * lm_loss_slots +
             self.slot_contrastive_weight * slot_contrastive_loss +
+            self.slot_diversity_weight * slot_diversity_loss +
             0.5 * (q_halt_loss + q_continue_loss)
         )
 
@@ -232,6 +299,7 @@ class SlotContrastiveLossHead(nn.Module):
             "lm_loss": lm_loss_direct.detach(),
             "lm_loss_slots": lm_loss_slots.detach(),
             "slot_contrastive_loss": slot_contrastive_loss.detach(),
+            "slot_diversity_loss": slot_diversity_loss.detach(),
             "q_halt_loss": q_halt_loss.detach(),
         }
 
