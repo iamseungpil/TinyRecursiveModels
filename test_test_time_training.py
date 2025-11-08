@@ -83,8 +83,9 @@ def test_adapter():
     model, config = load_model(checkpoint_path, device)
 
     # Create adapter
+    # Use ID outside training range to avoid conflicts
     test_time_config = TestTimeConfig(
-        reserved_puzzle_id=0,
+        reserved_puzzle_id=876410,
         learning_rate=1e-3,
         max_steps=20,
         patience=3
@@ -113,17 +114,26 @@ def test_adapter():
             input_grid = arc_grid_to_np(ex['input'])
             output_grid = arc_grid_to_np(ex['output'])
 
-            # Pad to 30x30 and flatten
+            # Get original size
+            h, w = output_grid.shape
+
+            # Pad to 30x30 with PAD=0, colors+2
             input_padded = np.pad(
                 input_grid + 2,
-                ((0, 30 - input_grid.shape[0]), (0, 30 - input_grid.shape[1])),
+                ((0, 30 - h), (0, 30 - w)),
                 constant_values=0
             )
-            output_padded = np.pad(
-                output_grid + 2,
-                ((0, 30 - output_grid.shape[0]), (0, 30 - output_grid.shape[1])),
-                constant_values=0
-            )
+
+            # Add EOS tokens on boundaries (match dataset encoding)
+            eos_row, eos_col = h, w
+            if eos_row < 30:  # Bottom edge
+                input_padded[eos_row, 0:eos_col] = 1
+            if eos_col < 30:  # Right edge
+                input_padded[0:eos_row, eos_col] = 1
+
+            # Output: pad with -100 to ignore padding in loss calculation
+            output_padded = np.full((30, 30), -100, dtype=np.int64)
+            output_padded[:h, :w] = output_grid + 2
 
             train_examples.append({
                 'input': torch.from_numpy(input_padded.reshape(-1)).long(),

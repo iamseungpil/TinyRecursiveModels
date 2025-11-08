@@ -130,9 +130,24 @@ class ARC_TestTime:
             input_grid = arc_grid_to_np(ex['input'])
             output_grid = arc_grid_to_np(ex['output'])
 
-            # Pad to 30x30 and flatten to 900
-            input_padded = np.pad(input_grid + 2, ((0, 30 - input_grid.shape[0]), (0, 30 - input_grid.shape[1])), constant_values=0)
-            output_padded = np.pad(output_grid + 2, ((0, 30 - output_grid.shape[0]), (0, 30 - output_grid.shape[1])), constant_values=0)
+            # Get original size
+            h, w = output_grid.shape
+
+            # Pad to 30x30 with PAD=0, colors+2
+            # Match original encoding: dataset/build_arc_dataset.py:50-74
+            input_padded = np.pad(input_grid + 2, ((0, 30 - h), (0, 30 - w)), constant_values=0)
+
+            # Add EOS tokens on boundaries
+            eos_row, eos_col = h, w
+            if eos_row < 30:  # Bottom edge
+                input_padded[eos_row, 0:eos_col] = 1
+            if eos_col < 30:  # Right edge
+                input_padded[0:eos_row, eos_col] = 1
+
+            # Output: pad with -100 to ignore padding in loss calculation
+            output_padded = np.full((30, 30), -100, dtype=np.int64)
+            output_padded[:h, :w] = output_grid + 2
+            # EOS positions in output should also be -100 (ignored)
 
             train_tensors.append({
                 'input': torch.from_numpy(input_padded.reshape(-1)).long(),

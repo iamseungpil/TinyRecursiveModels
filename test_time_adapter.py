@@ -15,11 +15,14 @@ from dataclasses import dataclass
 @dataclass
 class TestTimeConfig:
     """Configuration for test-time adaptation."""
-    reserved_puzzle_id: int = 0  # ID slot for new puzzles
+    # Use ID outside training range (0-876405) to avoid conflicts
+    # ID 0 is blank_identifier_id and will be masked out by evaluator
+    reserved_puzzle_id: int = 876410  # ID slot for new puzzles
     learning_rate: float = 1e-3
     max_steps: int = 50
     patience: int = 5  # Early stopping
     min_loss_improvement: float = 1e-4
+    act_steps: int = 16  # Number of ACT steps per forward pass (match inference)
 
 
 class TestTimeAdapter:
@@ -66,7 +69,26 @@ class TestTimeAdapter:
         # Small random initialization
         with torch.no_grad():
             if hasattr(self.puzzle_emb, 'weights'):
-                # Direct weights access
+                # Check if we need to extend the embedding table
+                current_size = self.puzzle_emb.weights.shape[0]
+                if puzzle_id >= current_size:
+                    # Extend embedding table to accommodate new IDs
+                    emb_dim = self.puzzle_emb.weights.shape[1]
+                    extra_size = puzzle_id - current_size + 10  # Add buffer for multiple test puzzles
+                    extra_weights = torch.zeros(
+                        extra_size, emb_dim,
+                        device=self.puzzle_emb.weights.device,
+                        dtype=self.puzzle_emb.weights.dtype
+                    )
+                    # Concatenate and replace
+                    extended_weights = torch.cat([self.puzzle_emb.weights, extra_weights], dim=0)
+                    # Update the buffer (note: this creates a new buffer)
+                    self.puzzle_emb.weights = torch.nn.Parameter(
+                        extended_weights, requires_grad=False
+                    ).data
+                    print(f"Extended embedding table from {current_size} to {self.puzzle_emb.weights.shape[0]}")
+
+                # Initialize the specific embedding
                 emb_dim = self.puzzle_emb.weights.shape[1]
                 self.puzzle_emb.weights[puzzle_id] = torch.randn(emb_dim) * 0.01
             else:
@@ -176,18 +198,27 @@ class TestTimeAdapter:
                     if hasattr(carry, 'inner_carry'):
                         InnerCarry = type(carry.inner_carry)
                         Carry = type(carry)
+
+                        # Handle LSTM cell state if present (c_H field)
+                        inner_carry_dict = {
+                            'z_H': carry.inner_carry.z_H.to(device),
+                            'z_L': carry.inner_carry.z_L.to(device)
+                        }
+                        if hasattr(carry.inner_carry, 'c_H') and carry.inner_carry.c_H is not None:
+                            inner_carry_dict['c_H'] = carry.inner_carry.c_H.to(device)
+
                         carry = Carry(
-                            inner_carry=InnerCarry(
-                                z_H=carry.inner_carry.z_H.to(device),
-                                z_L=carry.inner_carry.z_L.to(device)
-                            ),
+                            inner_carry=InnerCarry(**inner_carry_dict),
                             steps=carry.steps.to(device),
                             halted=carry.halted.to(device),
                             current_data={k: v.to(device) for k, v in carry.current_data.items()}
                         )
 
-                    # Single ACT step for efficiency
-                    carry, outputs = self.model(carry, batch)
+                    # Run all ACT steps (match inference behavior)
+                    # During inference, the model runs 16 ACT steps
+                    # We must match this during adaptation to optimize the same features
+                    for _ in range(self.config.act_steps):
+                        carry, outputs = self.model(carry, batch)
 
                     # Compute loss
                     logits = outputs['logits']

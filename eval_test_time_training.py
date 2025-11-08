@@ -22,9 +22,53 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '4'
 
 
 def load_model(checkpoint_path: str, device: str):
-    """Load TRM model."""
+    """Load TRM model with config from checkpoint directory."""
     print(f"Loading model from {checkpoint_path}...")
 
+    # Try to load config from checkpoint directory
+    checkpoint_dir = os.path.dirname(checkpoint_path)
+    config_path = os.path.join(checkpoint_dir, "all_config.yaml")
+
+    if os.path.exists(config_path):
+        print(f"Loading config from {config_path}")
+        import yaml
+        with open(config_path, 'r') as f:
+            full_config = yaml.safe_load(f)
+
+        # Extract arch config
+        config = dict(full_config['arch'])
+
+        # Add missing required fields
+        config['batch_size'] = 1
+        config['seq_len'] = 900
+        config['vocab_size'] = 12
+        config['num_puzzle_identifiers'] = 876406
+
+        print(f"Loaded config: LSTM={config.get('use_lstm_gating', False)}, "
+              f"L_cycles={config.get('L_cycles', 'N/A')}")
+    else:
+        print(f"Warning: {config_path} not found, using hardcoded config")
+        config = {
+            "batch_size": 1,
+            "seq_len": 900,
+            "vocab_size": 12,
+            "num_puzzle_identifiers": 876406,
+            "puzzle_emb_ndim": 512,
+            "puzzle_emb_len": 16,
+            "hidden_size": 512,
+            "num_heads": 8,
+            "expansion": 4.0,
+            "H_cycles": 3,
+            "L_cycles": 4,
+            "H_layers": 0,
+            "L_layers": 2,
+            "halt_max_steps": 16,
+            "halt_exploration_prob": 0.0,
+            "pos_encodings": "rope",
+            "no_ACT_continue": True,
+        }
+
+    # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
     if "model_state_dict" in checkpoint:
@@ -32,6 +76,7 @@ def load_model(checkpoint_path: str, device: str):
     else:
         state_dict = checkpoint
 
+    # Clean state dict
     cleaned_state_dict = {}
     for k, v in state_dict.items():
         if k.startswith('_orig_mod.model.'):
@@ -42,26 +87,7 @@ def load_model(checkpoint_path: str, device: str):
             k = k.replace('model.', '')
         cleaned_state_dict[k] = v
 
-    config = {
-        "batch_size": 1,
-        "seq_len": 900,
-        "vocab_size": 12,
-        "num_puzzle_identifiers": 876406,
-        "puzzle_emb_ndim": 512,
-        "puzzle_emb_len": 16,
-        "hidden_size": 512,
-        "num_heads": 8,
-        "expansion": 4.0,
-        "H_cycles": 3,
-        "L_cycles": 4,
-        "H_layers": 0,
-        "L_layers": 2,
-        "halt_max_steps": 16,
-        "halt_exploration_prob": 0.0,
-        "pos_encodings": "rope",
-        "no_ACT_continue": True,
-    }
-
+    # Create model with loaded config
     model = TinyRecursiveReasoningModel_ACTV1(config)
     model.load_state_dict(cleaned_state_dict, strict=False)
     model = model.to(device)
@@ -71,15 +97,77 @@ def load_model(checkpoint_path: str, device: str):
     return model, config
 
 
-def prepare_grid(grid: np.ndarray) -> torch.Tensor:
-    """Convert grid to model input format."""
-    # Pad to 30x30 and flatten
-    input_padded = np.pad(
+def prepare_grid(grid: np.ndarray, add_eos: bool = True) -> torch.Tensor:
+    """
+    Convert grid to model input format, matching original dataset encoding.
+
+    Original encoding (dataset/build_arc_dataset.py:50-74):
+    - PAD: 0, EOS: 1, colors: 2-11
+    - Grid is padded to 30x30, then EOS markers added on right and bottom edges
+
+    Args:
+        grid: Input grid (H, W) with values 0-9
+        add_eos: Whether to add EOS boundary markers (default: True)
+
+    Returns:
+        Flattened tensor of length 900
+    """
+    h, w = grid.shape
+
+    # Pad to 30x30 with 0 (PAD token)
+    # Colors are shifted by +2 (0-9 → 2-11)
+    padded = np.pad(
         grid + 2,
-        ((0, 30 - grid.shape[0]), (0, 30 - grid.shape[1])),
+        ((0, 30 - h), (0, 30 - w)),
         constant_values=0
     )
-    return torch.from_numpy(input_padded.reshape(-1)).long()
+
+    if add_eos:
+        # Add EOS tokens on right and bottom boundaries
+        # Matches: dataset/build_arc_dataset.py:65-70
+        eos_row, eos_col = h, w  # Using pad_r=0, pad_c=0 (no translation)
+
+        if eos_row < 30:  # Bottom edge EOS
+            padded[eos_row, 0:eos_col] = 1
+        if eos_col < 30:  # Right edge EOS
+            padded[0:eos_row, eos_col] = 1
+
+    return torch.from_numpy(padded.reshape(-1)).long()
+
+
+def prepare_grid_label(grid: np.ndarray, add_eos: bool = True) -> torch.Tensor:
+    """
+    Convert grid to label format with -100 padding for ignored positions.
+
+    EOS positions and PAD positions should be ignored in loss calculation.
+
+    Args:
+        grid: Output grid (H, W) with values 0-9
+        add_eos: Whether to add EOS boundary markers (default: True)
+
+    Returns:
+        Flattened tensor of length 900 with -100 for ignored positions
+    """
+    h, w = grid.shape
+
+    # Start with -100 everywhere (ignore)
+    label_padded = np.full((30, 30), -100, dtype=np.int64)
+
+    # Fill in actual grid values (shifted by +2)
+    label_padded[:h, :w] = grid + 2
+
+    if add_eos:
+        # EOS positions should also be -100 (ignored in loss)
+        # Original dataset converts pad_id=0 to -100 during collation
+        # EOS tokens (value=1) should also be ignored in loss
+        eos_row, eos_col = h, w
+
+        if eos_row < 30:  # Bottom edge EOS → ignore in loss
+            label_padded[eos_row, 0:eos_col] = -100
+        if eos_col < 30:  # Right edge EOS → ignore in loss
+            label_padded[0:eos_row, eos_col] = -100
+
+    return torch.from_numpy(label_padded.reshape(-1)).long()
 
 
 def predict(model, input_tensor: torch.Tensor, puzzle_id: int, device: str) -> np.ndarray:
@@ -100,11 +188,17 @@ def predict(model, input_tensor: torch.Tensor, puzzle_id: int, device: str) -> n
         if hasattr(carry, 'inner_carry'):
             InnerCarry = type(carry.inner_carry)
             Carry = type(carry)
+
+            # Handle LSTM cell state if present (c_H field)
+            inner_carry_dict = {
+                'z_H': carry.inner_carry.z_H.to(device),
+                'z_L': carry.inner_carry.z_L.to(device)
+            }
+            if hasattr(carry.inner_carry, 'c_H') and carry.inner_carry.c_H is not None:
+                inner_carry_dict['c_H'] = carry.inner_carry.c_H.to(device)
+
             carry = Carry(
-                inner_carry=InnerCarry(
-                    z_H=carry.inner_carry.z_H.to(device),
-                    z_L=carry.inner_carry.z_L.to(device)
-                ),
+                inner_carry=InnerCarry(**inner_carry_dict),
                 steps=carry.steps.to(device),
                 halted=carry.halted.to(device),
                 current_data={k: v.to(device) for k, v in carry.current_data.items()}
@@ -133,10 +227,16 @@ def evaluate_puzzle(
     use_adaptation: bool = True,
     puzzle_id: int = None
 ) -> Dict:
-    """Evaluate a single puzzle."""
+    """
+    Evaluate a single puzzle.
+
+    IMPORTANT: Uses puzzle IDs 876410+ to avoid conflicts with training data
+    (which uses IDs 0-876405) and blank_identifier_id (0).
+    """
     # Use separate IDs for with/without adaptation to avoid interference
+    # Both IDs are outside the training range to protect pre-trained embeddings
     if puzzle_id is None:
-        puzzle_id = 0 if use_adaptation else 1
+        puzzle_id = 876410 if use_adaptation else 876411
 
     # Prepare training examples
     train_examples = []
@@ -146,7 +246,7 @@ def evaluate_puzzle(
 
         train_examples.append({
             'input': prepare_grid(input_grid),
-            'output': prepare_grid(output_grid),
+            'output': prepare_grid_label(output_grid),  # Use -100 padding for labels
         })
 
     # Adapt if enabled
@@ -176,11 +276,17 @@ def evaluate_puzzle(
                 if hasattr(carry, 'inner_carry'):
                     InnerCarry = type(carry.inner_carry)
                     Carry = type(carry)
+
+                    # Handle LSTM cell state if present (c_H field)
+                    inner_carry_dict = {
+                        'z_H': carry.inner_carry.z_H.to(device),
+                        'z_L': carry.inner_carry.z_L.to(device)
+                    }
+                    if hasattr(carry.inner_carry, 'c_H') and carry.inner_carry.c_H is not None:
+                        inner_carry_dict['c_H'] = carry.inner_carry.c_H.to(device)
+
                     carry = Carry(
-                        inner_carry=InnerCarry(
-                            z_H=carry.inner_carry.z_H.to(device),
-                            z_L=carry.inner_carry.z_L.to(device)
-                        ),
+                        inner_carry=InnerCarry(**inner_carry_dict),
                         steps=carry.steps.to(device),
                         halted=carry.halted.to(device),
                         current_data={k: v.to(device) for k, v in carry.current_data.items()}
@@ -251,8 +357,10 @@ def main():
     model, config = load_model(args.checkpoint, device)
 
     # Create adapter
+    # Use IDs outside the training range to avoid conflicts
+    # Training uses IDs 0-876405, so we use 876410+ for test-time
     test_time_config = TestTimeConfig(
-        reserved_puzzle_id=0,
+        reserved_puzzle_id=876410,  # Safe ID outside training range
         learning_rate=1e-3,
         max_steps=50,
         patience=5
