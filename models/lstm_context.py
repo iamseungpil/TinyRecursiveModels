@@ -62,6 +62,12 @@ class LSTMStyleContext(nn.Module):
             h_t: New hidden state (B, L, D)
             c_t: New cell state (B, L, D)
         """
+        # Fixed: Convert inputs to LSTM dtype (FP32) for numerical stability
+        input_dtype = context_t.dtype
+        cell_state = cell_state.to(self.dtype)
+        context_t = context_t.to(self.dtype)
+        new_thought_t = new_thought_t.to(self.dtype)
+
         # Concatenate previous context and new thought for gate computation
         # Shape: (B, L, 2*D)
         combined = torch.cat([context_t, new_thought_t], dim=-1)
@@ -82,6 +88,11 @@ class LSTMStyleContext(nn.Module):
         # Compute hidden state (working context):
         # - Take current cell state and apply output gating
         h_t = o_t * torch.tanh(c_t)
+
+        # Convert h_t (working memory) back to input dtype for model compatibility
+        # Keep c_t (long-term memory) in FP32 for numerical precision
+        h_t = h_t.to(input_dtype)
+        # c_t stays in FP32! Do not convert to BF16
 
         return h_t, c_t
 

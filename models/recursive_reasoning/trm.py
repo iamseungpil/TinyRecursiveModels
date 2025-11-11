@@ -156,18 +156,34 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
         self.L_level = TinyRecursiveReasoningModel_ACTV1ReasoningModule(layers=[TinyRecursiveReasoningModel_ACTV1Block(self.config) for _i in range(self.config.L_layers)])
 
         # LSTM-style context gating (optional)
+        # Fixed: Use FP32 for LSTM gates (numerical stability)
+        # BF16 has only 7-bit mantissa which can cause gate saturation
         if self.config.use_lstm_gating:
             self.lstm_context = LSTMStyleContext(
                 hidden_dim=self.config.hidden_size,
                 init_forget_bias=self.config.lstm_init_forget_bias,
-                dtype=self.forward_dtype
+                dtype=torch.float32  # Always FP32 for LSTM, regardless of forward_dtype
             )
+
+            # Puzzle-aware c_H initialization: convert puzzle_emb to c_H initial state
+            # Only if puzzle_emb is enabled (puzzle_emb_ndim > 0)
+            if self.config.puzzle_emb_ndim > 0:
+                self.puzzle_emb_to_c_H = nn.Linear(
+                    self.config.puzzle_emb_ndim,
+                    self.config.hidden_size,
+                    bias=True,
+                    dtype=torch.float32  # Match LSTM dtype for numerical stability
+                )
+                # Initialize with small weights to avoid dominating initial state
+                nn.init.normal_(self.puzzle_emb_to_c_H.weight, std=0.01)
+                nn.init.zeros_(self.puzzle_emb_to_c_H.bias)
 
         # Initial states
         self.H_init = nn.Buffer(trunc_normal_init_(torch.empty(self.config.hidden_size, dtype=self.forward_dtype), std=1), persistent=True)
         self.L_init = nn.Buffer(trunc_normal_init_(torch.empty(self.config.hidden_size, dtype=self.forward_dtype), std=1), persistent=True)
         if self.config.use_lstm_gating:
-            self.C_init = nn.Buffer(torch.zeros(self.config.hidden_size, dtype=self.forward_dtype), persistent=True)
+            # LSTM cell state MUST be FP32 for numerical stability (not BF16)
+            self.C_init = nn.Buffer(torch.zeros(self.config.hidden_size, dtype=torch.float32), persistent=True)
 
         # Q head special init
         # Init Q to (almost) zero for faster learning during bootstrapping
@@ -198,20 +214,94 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
         return self.embed_scale * embedding
 
     def empty_carry(self, batch_size: int):
+        """Initialize carry state using learnable buffers (H_init, L_init, C_init).
+
+        Fixed: Changed from torch.empty (uninitialized memory) to proper initialization
+        using learnable buffers. This ensures deterministic behavior and reproducibility.
+
+        Note: This is kept for backward compatibility. Use empty_carry_with_puzzle() for
+        puzzle-aware c_H initialization.
+        """
         c_H = None
         if self.config.use_lstm_gating:
-            c_H = torch.empty(batch_size, self.config.seq_len + self.puzzle_emb_len, self.config.hidden_size, dtype=self.forward_dtype)
+            c_H = self.C_init.expand(batch_size, self.config.seq_len + self.puzzle_emb_len, -1).clone()
 
         return TinyRecursiveReasoningModel_ACTV1InnerCarry(
-            z_H=torch.empty(batch_size, self.config.seq_len + self.puzzle_emb_len, self.config.hidden_size, dtype=self.forward_dtype),
-            z_L=torch.empty(batch_size, self.config.seq_len + self.puzzle_emb_len, self.config.hidden_size, dtype=self.forward_dtype),
+            z_H=self.H_init.expand(batch_size, self.config.seq_len + self.puzzle_emb_len, -1).clone(),
+            z_L=self.L_init.expand(batch_size, self.config.seq_len + self.puzzle_emb_len, -1).clone(),
             c_H=c_H,
         )
-        
-    def reset_carry(self, reset_flag: torch.Tensor, carry: TinyRecursiveReasoningModel_ACTV1InnerCarry):
+
+    def empty_carry_with_puzzle(self, puzzle_identifiers: torch.Tensor):
+        """Initialize carry state with puzzle-aware c_H initialization.
+
+        Uses puzzle_emb to generate initial c_H state specific to each puzzle.
+        This allows the model to start with puzzle-specific context without
+        maintaining a large cache of states.
+
+        Args:
+            puzzle_identifiers: (batch_size,) tensor of puzzle IDs
+
+        Returns:
+            InnerCarry with puzzle-aware c_H initialization
+        """
+        batch_size = puzzle_identifiers.shape[0]
+
+        # Initialize z_H and z_L as usual
+        z_H = self.H_init.expand(batch_size, self.config.seq_len + self.puzzle_emb_len, -1).clone()
+        z_L = self.L_init.expand(batch_size, self.config.seq_len + self.puzzle_emb_len, -1).clone()
+
+        # Initialize c_H with puzzle-aware state
         c_H = None
         if self.config.use_lstm_gating:
-            c_H = torch.where(reset_flag.view(-1, 1, 1), self.C_init, carry.c_H)
+            if self.config.puzzle_emb_ndim > 0 and hasattr(self, 'puzzle_emb_to_c_H'):
+                # Puzzle-aware initialization: puzzle_emb → c_H
+                puzzle_embs = self.puzzle_emb(puzzle_identifiers)  # (B, emb_ndim), BF16
+
+                # Convert to FP32 to match puzzle_emb_to_c_H dtype
+                puzzle_embs_fp32 = puzzle_embs.to(torch.float32)
+                c_H_init = self.puzzle_emb_to_c_H(puzzle_embs_fp32)  # (B, hidden_size), FP32
+
+                # Expand to sequence length: (B, seq_len, hidden_size)
+                c_H = c_H_init.unsqueeze(1).expand(
+                    -1, self.config.seq_len + self.puzzle_emb_len, -1
+                ).contiguous().clone()
+            else:
+                # Fallback to C_init if puzzle_emb not available
+                c_H = self.C_init.expand(batch_size, self.config.seq_len + self.puzzle_emb_len, -1).clone()
+
+        return TinyRecursiveReasoningModel_ACTV1InnerCarry(
+            z_H=z_H,
+            z_L=z_L,
+            c_H=c_H,
+        )
+
+    def reset_carry(self, reset_flag: torch.Tensor, carry: TinyRecursiveReasoningModel_ACTV1InnerCarry, puzzle_identifiers: Optional[torch.Tensor] = None):
+        """Reset carry state for halted sequences.
+
+        Args:
+            reset_flag: Boolean tensor indicating which sequences to reset
+            carry: Current carry state
+            puzzle_identifiers: Optional puzzle IDs for puzzle-aware c_H initialization
+        """
+        c_H = None
+        if self.config.use_lstm_gating:
+            if puzzle_identifiers is not None and self.config.puzzle_emb_ndim > 0 and hasattr(self, 'puzzle_emb_to_c_H'):
+                # Puzzle-aware reset: use puzzle_emb for reset sequences
+                puzzle_embs = self.puzzle_emb(puzzle_identifiers)  # (B, emb_ndim), BF16
+                puzzle_embs_fp32 = puzzle_embs.to(torch.float32)
+                c_H_reset = self.puzzle_emb_to_c_H(puzzle_embs_fp32)  # (B, hidden_size), FP32
+
+                # Expand to sequence length
+                c_H_reset_expanded = c_H_reset.unsqueeze(1).expand(
+                    -1, self.config.seq_len + self.puzzle_emb_len, -1
+                )
+
+                # Use puzzle-aware c_H for reset, keep old c_H for non-reset
+                c_H = torch.where(reset_flag.view(-1, 1, 1), c_H_reset_expanded, carry.c_H)
+            else:
+                # Fallback: use C_init
+                c_H = torch.where(reset_flag.view(-1, 1, 1), self.C_init, carry.c_H)
 
         return TinyRecursiveReasoningModel_ACTV1InnerCarry(
             z_H=torch.where(reset_flag.view(-1, 1, 1), self.H_init, carry.z_H),
@@ -232,34 +322,36 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
         z_H, z_L = carry.z_H, carry.z_L
         c_H = carry.c_H if self.config.use_lstm_gating else None
 
-        # H_cycles-1 without grad
-        with torch.no_grad():
-            for _H_step in range(self.config.H_cycles-1):
+        # Fixed: Separate gradient strategies for LSTM vs baseline
+        if self.config.use_lstm_gating:
+            # LSTM path: All H-cycles WITH gradients (required for LSTM learning)
+            for _H_step in range(self.config.H_cycles):
                 for _L_step in range(self.config.L_cycles):
                     z_L = self.L_level(z_L, z_H + input_embeddings, **seq_info)
-
-                # Context update with LSTM gating or standard update
-                if self.config.use_lstm_gating:
-                    z_H, c_H = self.lstm_context(c_H, z_H, z_L)
-                else:
+                z_H, c_H = self.lstm_context(c_H, z_H, z_L)
+        else:
+            # Baseline path: H_cycles-1 without grad, 1 with grad (original optimization)
+            with torch.no_grad():
+                for _H_step in range(self.config.H_cycles-1):
+                    for _L_step in range(self.config.L_cycles):
+                        z_L = self.L_level(z_L, z_H + input_embeddings, **seq_info)
                     z_H = self.L_level(z_H, z_L, **seq_info)
 
-        # 1 with grad
-        for _L_step in range(self.config.L_cycles):
-            z_L = self.L_level(z_L, z_H + input_embeddings, **seq_info)
-
-        # Context update with LSTM gating or standard update
-        if self.config.use_lstm_gating:
-            z_H, c_H = self.lstm_context(c_H, z_H, z_L)
-        else:
+            # Final H-cycle with gradients
+            for _L_step in range(self.config.L_cycles):
+                z_L = self.L_level(z_L, z_H + input_embeddings, **seq_info)
             z_H = self.L_level(z_H, z_L, **seq_info)
 
         # LM Outputs
+        # Fixed: Detach z_H/z_L but NOT c_H to allow LSTM BPTT across ACT steps
+        # - z_H/z_L: Detached to prevent baseline path graph accumulation
+        # - c_H: NOT detached - LSTM needs gradients across ACT steps for long-term memory
+        # - This allows LSTM to learn how cell state should evolve across puzzle-solving steps
         new_carry = TinyRecursiveReasoningModel_ACTV1InnerCarry(
             z_H=z_H.detach(),
             z_L=z_L.detach(),
-            c_H=c_H.detach() if self.config.use_lstm_gating else None
-        )  # New carry no grad
+            c_H=c_H if self.config.use_lstm_gating else None  # NO detach for LSTM BPTT!
+        )
         output = self.lm_head(z_H)[:, self.puzzle_emb_len:]
         q_logits = self.q_head(z_H[:, 0]).to(torch.float32) # Q-head; uses the first puzzle_emb position
         return new_carry, output, (q_logits[..., 0], q_logits[..., 1])
@@ -280,9 +372,15 @@ class TinyRecursiveReasoningModel_ACTV1(nn.Module):
     def initial_carry(self, batch: Dict[str, torch.Tensor]):
         batch_size = batch["inputs"].shape[0]
 
+        # Use puzzle-aware c_H initialization if puzzle_identifiers available
+        if "puzzle_identifiers" in batch and self.config.puzzle_emb_ndim > 0:
+            inner_carry = self.inner.empty_carry_with_puzzle(batch["puzzle_identifiers"])
+        else:
+            inner_carry = self.inner.empty_carry(batch_size)
+
         return TinyRecursiveReasoningModel_ACTV1Carry(
-            inner_carry=self.inner.empty_carry(batch_size),  # Empty is expected, it will be reseted in first pass as all sequences are halted.
-            
+            inner_carry=inner_carry,  # Now uses puzzle-aware c_H
+
             steps=torch.zeros((batch_size, ), dtype=torch.int32),
             halted=torch.ones((batch_size, ), dtype=torch.bool),  # Default to halted
             
@@ -292,8 +390,10 @@ class TinyRecursiveReasoningModel_ACTV1(nn.Module):
     def forward(self, carry: TinyRecursiveReasoningModel_ACTV1Carry, batch: Dict[str, torch.Tensor]) -> Tuple[TinyRecursiveReasoningModel_ACTV1Carry, Dict[str, torch.Tensor]]:
 
         # Update data, carry (removing halted sequences)
-        new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry)
-        
+        # Pass puzzle_identifiers for puzzle-aware c_H reset
+        puzzle_identifiers = batch.get("puzzle_identifiers", None)
+        new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry, puzzle_identifiers)
+
         new_steps = torch.where(carry.halted, 0, carry.steps)
 
         new_current_data = {k: torch.where(carry.halted.view((-1, ) + (1, ) * (batch[k].ndim - 1)), batch[k], v) for k, v in carry.current_data.items()}
@@ -311,8 +411,10 @@ class TinyRecursiveReasoningModel_ACTV1(nn.Module):
             # Step
             new_steps = new_steps + 1
             is_last_step = new_steps >= self.config.halt_max_steps
-            
-            halted = is_last_step
+
+            # Preserve input halted state (critical for forced halting in training)
+            # Once a sample halts, it should stay halted for this batch
+            halted = carry.halted | is_last_step
 
             # if training, and ACT is enabled
             if self.training and (self.config.halt_max_steps > 1):

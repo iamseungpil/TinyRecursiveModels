@@ -17,7 +17,6 @@ import coolname
 import hydra
 import pydantic
 from omegaconf import DictConfig
-from adam_atan2 import AdamATan2
 
 from puzzle_dataset import PuzzleDataset, PuzzleDatasetConfig, PuzzleDatasetMetadata
 from utils.functions import load_model_class, get_model_source_path
@@ -74,6 +73,8 @@ class PretrainConfig(pydantic.BaseModel):
 
     # Extras
     seed: int = 0
+    train_act_steps: int = 0  # Number of ACT steps during training (0=disabled/single-step, 2-16=multi-step)
+    gradient_clip_norm: float = 1.0  # Gradient clipping max norm (0=disabled)
     checkpoint_every_eval: bool = False
     eval_interval: Optional[int] = None
     min_eval_interval: Optional[int] = 0 # when to start eval
@@ -147,7 +148,7 @@ def create_model(config: PretrainConfig, train_metadata: PuzzleDatasetMetadata, 
     # Optimizers and lr
     if config.arch.puzzle_emb_ndim == 0:
         optimizers = [
-            AdamATan2(
+            torch.optim.Adam(
                 model.parameters(),
                 lr=0,  # Needs to be set by scheduler
                 weight_decay=config.weight_decay,
@@ -177,7 +178,7 @@ def create_model(config: PretrainConfig, train_metadata: PuzzleDatasetMetadata, 
                 weight_decay=config.puzzle_emb_weight_decay,
                 world_size=world_size
             ),
-            AdamATan2(
+            torch.optim.Adam(
                 model.parameters(),
                 lr=0,  # Needs to be set by scheduler
                 weight_decay=config.weight_decay,
@@ -294,14 +295,104 @@ def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, glo
     # To device
     batch = {k: v.cuda() for k, v in batch.items()}
 
-    # Init carry if it is None
-    if train_state.carry is None:
-        with torch.device("cuda"):
-            train_state.carry = train_state.model.initial_carry(batch)  # type: ignore
+    # Phase 1 Fix: Always initialize carry fresh for each batch
+    # This fixes train/test mismatch and enables puzzle-aware c_H initialization
+    with torch.device("cuda"):
+        carry = train_state.model.initial_carry(batch)  # Puzzle-aware initialization
 
-    # Forward
-    train_state.carry, loss, metrics, _, _ = train_state.model(carry=train_state.carry, batch=batch, return_keys=[])
+    # Forward with optional ACT loop for LSTM long-sequence learning
+    if config.train_act_steps > 1:
+        # Multi-step ACT training with gradient accumulation
+        # Use smaller batch size to fit in memory - ACT loop keeps computation graphs connected
+        accumulated_metrics = {}
+        accumulated_loss_value = 0.0  # For monitoring
+        act_steps_taken = 0
 
+        # Accumulate losses in computation graph for true BPTT across ACT steps
+        losses = []
+
+        for act_step in range(config.train_act_steps):
+            carry, step_loss, step_metrics, _, all_finish = train_state.model(
+                carry=carry, batch=batch, return_keys=[]
+            )
+
+            losses.append(step_loss)
+
+            # Accumulate metrics as scalars (detached from computation graph)
+            accumulated_loss_value += step_loss.item()
+            for k, v in step_metrics.items():
+                v_scalar = v.item() if hasattr(v, 'item') else float(v)
+
+                if k in ['count', 'correct', 'exact_accuracy', 'q_halt_accuracy']:
+                    # Accumulate count/correct across ACT steps
+                    # Each step reports newly halted samples, so we sum them
+                    if k not in accumulated_metrics:
+                        accumulated_metrics[k] = v_scalar
+                    else:
+                        accumulated_metrics[k] += v_scalar
+                else:
+                    # Accumulate for averaging (loss, steps, etc.)
+                    if k not in accumulated_metrics:
+                        accumulated_metrics[k] = v_scalar
+                    else:
+                        accumulated_metrics[k] += v_scalar
+
+            act_steps_taken += 1
+
+            if all_finish:
+                break
+
+        # Average losses (keeps computation graph)
+        loss = sum(losses) / act_steps_taken
+
+        # If no samples halted during limited ACT steps, force one final forward
+        # pass with all samples marked as halted to compute final metrics
+        if accumulated_metrics.get('count', 0) == 0:
+            # Force all samples to halt by setting carry.halted = True
+            from models.recursive_reasoning.trm import TinyRecursiveReasoningModel_ACTV1Carry
+            forced_carry = TinyRecursiveReasoningModel_ACTV1Carry(
+                inner_carry=carry.inner_carry,
+                steps=carry.steps,
+                halted=torch.ones_like(carry.halted),  # Force all halted
+                current_data=carry.current_data
+            )
+
+            # Forward pass with forced halting (no gradient needed for metrics)
+            with torch.no_grad():
+                _, _, final_metrics, _, _ = train_state.model(
+                    carry=forced_carry, batch=batch, return_keys=[]
+                )
+
+            # Use these forced metrics for count/correct/accuracy
+            for k in ['count', 'correct', 'exact_accuracy', 'q_halt_accuracy']:
+                if k in final_metrics:
+                    accumulated_metrics[k] = final_metrics[k].item()
+
+        # Create metrics dict for logging
+        # count/correct: accumulated across ACT steps (total halted samples)
+        # loss/steps: averaged across ACT steps
+        metrics = {}
+        for k, v in accumulated_metrics.items():
+            if k in ['count', 'correct', 'exact_accuracy', 'q_halt_accuracy']:
+                # Total accumulated value
+                metrics[k] = torch.tensor(v, device='cuda', dtype=torch.float32)
+            else:
+                # Average metrics: divide by act_steps
+                metrics[k] = torch.tensor(v / act_steps_taken, device='cuda', dtype=torch.float32)
+
+        # Add ACT-specific metrics (no 'train/' prefix - will be added later)
+        metrics['act_steps'] = torch.tensor(float(act_steps_taken), device='cuda', dtype=torch.float32)
+        metrics['act_early_finish'] = torch.tensor(1.0 if all_finish else 0.0, device='cuda', dtype=torch.float32)
+    else:
+        # Single-step forward (original behavior)
+        carry, loss, metrics, _, _ = train_state.model(
+            carry=carry, batch=batch, return_keys=[]
+        )
+
+    # Note: carry is discarded after this batch (not stored in train_state)
+    # This ensures each batch starts fresh, matching evaluation behavior
+
+    # Backward
     ((1 / global_batch_size) * loss).backward()
 
     # Allreduce
@@ -309,7 +400,12 @@ def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, glo
         for param in train_state.model.parameters():
             if param.grad is not None:
                 dist.all_reduce(param.grad)
-            
+
+    # Gradient clipping for stability (especially with LSTM BPTT)
+    # Prevents gradient explosion in long backprop chains
+    if config.gradient_clip_norm > 0:
+        torch.nn.utils.clip_grad_norm_(train_state.model.parameters(), config.gradient_clip_norm)
+
     # Apply optimizer
     lr_this_step = None    
     for optim, base_lr in zip(train_state.optimizers, train_state.optimizer_lrs):
@@ -614,27 +710,33 @@ def launch(hydra_config: DictConfig):
 
         if _iter_id >= config.min_eval_interval:
             ############ Evaluation
-            if RANK == 0:
-                print("EVALUATE")
             if config.ema:
                 print("SWITCH TO EMA")
                 train_state_eval = copy.deepcopy(train_state)
                 train_state_eval.model = ema_helper.ema_copy(train_state_eval.model)
             else:
                 train_state_eval = train_state
-            train_state_eval.model.eval()
-            metrics = evaluate(config, 
-                train_state_eval, 
-                eval_loader, 
-                eval_metadata, 
-                evaluators,
-                rank=RANK, 
-                world_size=WORLD_SIZE,
-                cpu_group=CPU_PROCESS_GROUP)
 
-            if RANK == 0 and metrics is not None:
-                wandb.log(metrics, step=train_state.step)
-                
+            # Only run evaluation if eval_loader exists
+            if eval_loader is not None:
+                if RANK == 0:
+                    print("EVALUATE")
+                train_state_eval.model.eval()
+                metrics = evaluate(config,
+                    train_state_eval,
+                    eval_loader,
+                    eval_metadata,
+                    evaluators,
+                    rank=RANK,
+                    world_size=WORLD_SIZE,
+                    cpu_group=CPU_PROCESS_GROUP)
+
+                if RANK == 0 and metrics is not None:
+                    wandb.log(metrics, step=train_state.step)
+            else:
+                if RANK == 0:
+                    print("SKIP EVALUATION (no eval data)")
+
             ############ Checkpointing
             if RANK == 0:
                 print("SAVE CHECKPOINT")
