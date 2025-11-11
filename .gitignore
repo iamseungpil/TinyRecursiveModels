@@ -1,0 +1,41 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Wandb logs
+wandb/
+
+# Outputs
+outputs/
+results/
+*.log
+
+# Local checkpoints (real ones in /data/)
+checkpoints/
+
+# Jupyter notebooks
+.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Experiment-specific
+latent_analysis/results/
+*.pkl
+*.json.gz
