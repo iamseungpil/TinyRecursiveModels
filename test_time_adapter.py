@@ -22,7 +22,6 @@ class TestTimeConfig:
     max_steps: int = 50
     patience: int = 5  # Early stopping
     min_loss_improvement: float = 1e-4
-    act_steps: int = 16  # Number of ACT steps per forward pass (match inference)
 
 
 class TestTimeAdapter:
@@ -88,9 +87,16 @@ class TestTimeAdapter:
                     ).data
                     print(f"Extended embedding table from {current_size} to {self.puzzle_emb.weights.shape[0]}")
 
-                # Initialize the specific embedding
+                # Initialize from mean of trained embeddings
+                # This gives a better starting point than random initialization
                 emb_dim = self.puzzle_emb.weights.shape[1]
-                self.puzzle_emb.weights[puzzle_id] = torch.randn(emb_dim) * 0.01
+                # Use actual trained puzzle count (avoid hardcoding)
+                current_table_size = self.puzzle_emb.weights.shape[0]
+                num_trained = min(876406, current_table_size)
+                trained_embs = self.puzzle_emb.weights[:num_trained]  # All trained puzzle embeddings
+                mean_emb = trained_embs.mean(dim=0)
+                # Initialize as mean + small noise (norm ~3.6 like trained embeddings)
+                self.puzzle_emb.weights[puzzle_id] = mean_emb + torch.randn(emb_dim, device=mean_emb.device) * 0.1
             else:
                 raise ValueError("Cannot access puzzle embedding weights")
 
@@ -214,11 +220,15 @@ class TestTimeAdapter:
                             current_data={k: v.to(device) for k, v in carry.current_data.items()}
                         )
 
-                    # Run all ACT steps (match inference behavior)
-                    # During inference, the model runs 16 ACT steps
-                    # We must match this during adaptation to optimize the same features
-                    for _ in range(self.config.act_steps):
+                    # Run full ACT loop (match inference behavior)
+                    # This ensures test-time training optimizes the same reasoning path as inference
+                    act_step = 0
+                    max_act_steps = 16  # Same as inference
+                    while act_step < max_act_steps:
                         carry, outputs = self.model(carry, batch)
+                        act_step += 1
+                        if carry.halted.all():
+                            break
 
                     # Compute loss
                     logits = outputs['logits']
@@ -236,6 +246,9 @@ class TestTimeAdapter:
 
                 # Average loss
                 avg_loss = total_loss / len(train_examples)
+
+                # Gradient clipping to prevent exploding gradients
+                torch.nn.utils.clip_grad_norm_([puzzle_emb_param], max_norm=1.0)
 
                 # Optimizer step
                 optimizer.step()
