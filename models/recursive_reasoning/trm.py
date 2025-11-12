@@ -372,27 +372,25 @@ class TinyRecursiveReasoningModel_ACTV1(nn.Module):
     def initial_carry(self, batch: Dict[str, torch.Tensor]):
         batch_size = batch["inputs"].shape[0]
 
-        # Use puzzle-aware c_H initialization if puzzle_identifiers available
-        if "puzzle_identifiers" in batch and self.config.puzzle_emb_ndim > 0:
-            inner_carry = self.inner.empty_carry_with_puzzle(batch["puzzle_identifiers"])
-        else:
-            inner_carry = self.inner.empty_carry(batch_size)
+        # FIXED: For pretrain, always use C_init (learnable constant) for c_H initialization
+        # This allows LSTM to learn from scratch without puzzle-specific bias
+        # puzzle_emb is still used in input embeddings (as in original TRM)
+        inner_carry = self.inner.empty_carry(batch_size)
 
         return TinyRecursiveReasoningModel_ACTV1Carry(
-            inner_carry=inner_carry,  # Now uses puzzle-aware c_H
+            inner_carry=inner_carry,  # Uses C_init for c_H (puzzle-agnostic)
 
             steps=torch.zeros((batch_size, ), dtype=torch.int32),
             halted=torch.ones((batch_size, ), dtype=torch.bool),  # Default to halted
-            
+
             current_data={k: torch.empty_like(v) for k, v in batch.items()}
         )
         
     def forward(self, carry: TinyRecursiveReasoningModel_ACTV1Carry, batch: Dict[str, torch.Tensor]) -> Tuple[TinyRecursiveReasoningModel_ACTV1Carry, Dict[str, torch.Tensor]]:
 
         # Update data, carry (removing halted sequences)
-        # Pass puzzle_identifiers for puzzle-aware c_H reset
-        puzzle_identifiers = batch.get("puzzle_identifiers", None)
-        new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry, puzzle_identifiers)
+        # FIXED: Don't pass puzzle_identifiers - use C_init for reset (puzzle-agnostic)
+        new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry, puzzle_identifiers=None)
 
         new_steps = torch.where(carry.halted, 0, carry.steps)
 
