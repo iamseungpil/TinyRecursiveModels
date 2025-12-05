@@ -1,0 +1,194 @@
+# ============================================================================
+# Encoder Stages Configuration
+# ============================================================================
+# This file defines configurations for staged encoder experiments.
+# All stages preserve the original TRM hyperparameters.
+#
+# Usage:
+#   python pretrain_stage1.py +encoder_stage=stage1
+# ============================================================================
+
+# ============================================================================
+# Original TRM Hyperparameters (DO NOT MODIFY)
+# ============================================================================
+# These are the baseline hyperparameters that must be preserved across all stages.
+
+base_trm:
+  # Architecture
+  H_cycles: 3
+  L_cycles: 6
+  L_layers: 2
+  hidden_size: 512
+  num_heads: 8
+  expansion: 4
+  puzzle_emb_len: 16
+  pos_encodings: rope
+  forward_dtype: bfloat16
+
+  # Training
+  global_batch_size: 768
+  lr: 1e-4
+  puzzle_emb_lr: 1e-2
+  weight_decay: 0.1
+  puzzle_emb_weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  lr_warmup_steps: 2000
+  lr_min_ratio: 1.0
+
+# ============================================================================
+# Stage 0: Baseline (Original TRM)
+# ============================================================================
+# No encoder modifications. Pure baseline for comparison.
+stage0:
+  name: "baseline"
+  description: "Original TRM without any encoder modifications"
+
+  # No encoder features
+  use_goal_encoder: false
+  use_goal_conditioning: false
+  use_grid_encoder_for_input: false
+  use_history: false
+
+  # All TRM parameters trainable
+  freeze_trm: false
+
+# ============================================================================
+# Stage 1: GridEncoder for Input Only
+# ============================================================================
+# Replace embed_tokens with GridEncoder for input embedding.
+# Uses learnable CLS + padding as prefix (16 tokens total).
+# No few-shot data required.
+
+stage1:
+  name: "grid_encoder"
+  description: "GridEncoder for input embedding with CLS token"
+
+  # Enable GridEncoder only
+  use_goal_encoder: false
+  use_goal_conditioning: false
+  use_grid_encoder_for_input: true
+  use_history: false
+
+  # GridEncoder architecture
+  grid_encoder_layers: 2
+  grid_encoder_heads: 4
+
+  # Training configuration
+  freeze_trm: false
+
+  # Learning rates
+  # - CLS/prefix tokens: puzzle_emb_lr (1e-2, high LR for fast learning)
+  # - GridEncoder: lr (1e-4)
+  # - TRM backbone: lr (1e-4)
+
+# ============================================================================
+# Stage 2: GoalEncoder (Input Only)
+# ============================================================================
+# GoalEncoder produces 16 goal tokens from few-shot inputs.
+# No output information used - simple replacement for puzzle_emb.
+# Requires few_shot_inputs in batch.
+
+stage2:
+  name: "goal_encoder_input_only"
+  description: "GoalEncoder from few-shot inputs (no output info)"
+
+  # Enable GoalEncoder without conditioning
+  use_goal_encoder: true
+  use_goal_conditioning: false
+  use_grid_encoder_for_input: false
+  use_history: false
+
+  # GoalEncoder architecture
+  num_goal_tokens: 16  # Must match puzzle_emb_len
+  goal_aggregation: "attention"
+
+  # GridEncoder (used by GoalEncoder)
+  grid_encoder_layers: 2
+  grid_encoder_heads: 4
+
+  # Training configuration
+  freeze_trm: true  # Freeze TRM, only train encoder
+  freeze_goal_encoder: false
+
+# ============================================================================
+# Stage 3: GoalEncoder with Full Goal Conditioning
+# ============================================================================
+# GoalEncoder uses both input and output information.
+# Goal captures transformation pattern from few-shot pairs.
+# Requires both few_shot_inputs and few_shot_outputs in batch.
+
+stage3:
+  name: "goal_conditioning"
+  description: "GoalEncoder with full goal conditioning (input + output)"
+
+  # Enable full goal conditioning
+  use_goal_encoder: true
+  use_goal_conditioning: true
+  use_grid_encoder_for_input: false
+  use_history: false
+
+  # GoalEncoder architecture
+  num_goal_tokens: 16
+  goal_aggregation: "attention"
+
+  # GridEncoder (used by GoalEncoder)
+  grid_encoder_layers: 2
+  grid_encoder_heads: 4
+
+  # Training configuration
+  freeze_trm: true  # Freeze TRM, only train encoder
+
+# ============================================================================
+# Stage 4: Full Integration with History
+# ============================================================================
+# All Stage 3 features plus z_L history aggregation.
+# Cross-attention to past z_L states for detailed reasoning context.
+
+stage4:
+  name: "full_integration"
+  description: "Full integration with z_L history aggregation"
+
+  # Enable all features
+  use_goal_encoder: true
+  use_goal_conditioning: true
+  use_grid_encoder_for_input: true
+  use_history: true
+
+  # GoalEncoder architecture
+  num_goal_tokens: 16
+  goal_aggregation: "attention"
+
+  # GridEncoder architecture
+  grid_encoder_layers: 2
+  grid_encoder_heads: 4
+
+  # History aggregator
+  history_window_size: 3
+
+  # Training configuration
+  freeze_trm: false  # Fine-tune everything
+
+# ============================================================================
+# Ablation: GridEncoder + GoalEncoder (no history)
+# ============================================================================
+# Intermediate stage between Stage 3 and Stage 4.
+# GridEncoder for input + GoalEncoder for prefix, no history.
+
+stage3b:
+  name: "grid_plus_goal"
+  description: "GridEncoder for input + GoalEncoder for prefix"
+
+  use_goal_encoder: true
+  use_goal_conditioning: true
+  use_grid_encoder_for_input: true
+  use_history: false
+
+  # Architecture
+  num_goal_tokens: 16
+  goal_aggregation: "attention"
+  grid_encoder_layers: 2
+  grid_encoder_heads: 4
+
+  # Training configuration
+  freeze_trm: false

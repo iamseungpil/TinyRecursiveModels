@@ -1,0 +1,132 @@
+# Stage 1 Training Config: TRM with GridEncoder for Input Embedding
+# ================================================================
+#
+# This config is used by pretrain_stage1.py which internally wraps
+# the base TRM with EnhancedTRM for Stage 1 (GridEncoder only).
+#
+# Two modes supported:
+#
+# 1. GridEncoder Mode (use_grid_encoder=True):
+#    - use_original_puzzle_emb=False (default):
+#      * Input: [CLS(1) + padding(15), grid_tokens(L)]
+#      * Position 0 = CLS token (for q_head)
+#      * puzzle_emb is NOT used (excluded from optimizer)
+#
+#    - use_original_puzzle_emb=True:
+#      * Input: [puzzle_emb(16), grid_tokens(L)]
+#      * puzzle_emb IS used (included in optimizer)
+#
+# 2. Original Mode (use_grid_encoder=False):
+#    - Exact same as main branch TRM
+#    - Uses embed_tokens + puzzle_emb + position encoding + scaling
+#
+# Position Encoding Strategy (when use_grid_encoder=True):
+# ========================================================
+# GridEncoder and TRM each contribute position information. These
+# serve DIFFERENT semantic purposes:
+#
+# 1. GridEncoder pos_embed (grid_position_encoding_mode):
+#    - "additive": pos_embed[0:L] added to grid tokens
+#      * Captures 2D grid spatial structure (default)
+#    - "none": No position encoding from GridEncoder
+#      * Rely on TRM RoPE only
+#    - "offset": pos_embed[16:16+L] added to grid tokens
+#      * Aligned with TRM sequence positions
+#
+# 2. TRM RoPE (disable_rope_for_encoder):
+#    - False (default): RoPE applied in attention to all tokens
+#    - True: No RoPE when using GridEncoder
+#
+# Recommended Configurations:
+# - Hybrid (default): additive + RoPE (both spatial and sequence info)
+# - RoPE Only: none + RoPE (like standard transformer)
+# - GridEncoder Only: additive + no RoPE (grid spatial only)
+# - Aligned: offset + RoPE (both use same position indices)
+#
+# Hyperparameters: Matched to original TRM exactly
+#
+defaults:
+  - arch: trm
+  - _self_
+
+hydra:
+  output_subdir: null
+
+# Data paths
+data_paths: ['/data/arc1concept-aug-1000/']
+data_paths_test: ['/data/arc1concept-aug-1000/']
+
+evaluators:
+  - name: arc@ARC
+
+# Checkpoint
+load_checkpoint: null
+checkpoint_path: /data/TinyRecursiveModels/checkpoints/stage1_grid_encoder
+
+# ========================================================================
+# Stage 1 Mode Configuration
+# ========================================================================
+# use_grid_encoder: Whether to use GridEncoder for input embedding
+#   - True: Use GridEncoder (Stage 1)
+#   - False: Use original TRM (Stage 0 baseline)
+use_grid_encoder: True
+
+# use_original_puzzle_emb: When using GridEncoder, how to handle prefix
+#   - False (default): Use CLS + padding tokens (puzzle_emb excluded)
+#   - True: Use original puzzle_emb (puzzle_emb included)
+use_original_puzzle_emb: False
+
+# ========================================================================
+# Position Encoding Strategy (only applies when use_grid_encoder=True)
+# ========================================================================
+# grid_position_encoding_mode: How GridEncoder handles position encoding
+#   - "additive" (default): Add pos_embed[0:L] to grid tokens
+#     * Captures 2D grid spatial structure
+#     * Combined with TRM RoPE for sequence position
+#   - "none": No position encoding from GridEncoder
+#     * Rely entirely on TRM RoPE for position info
+#   - "offset": Add pos_embed[16:16+L] to grid tokens
+#     * Aligned with TRM sequence positions (after prefix)
+grid_position_encoding_mode: "additive"
+
+# disable_rope_for_encoder: Disable TRM RoPE when using GridEncoder
+#   - False (default): RoPE still applied in attention
+#     * Grid tokens have BOTH GridEncoder pos_embed AND RoPE
+#   - True: No RoPE applied
+#     * Grid tokens only have GridEncoder pos_embed
+disable_rope_for_encoder: False
+
+# ========================================================================
+# Hyperparameters - MATCHED TO ORIGINAL TRM
+# ========================================================================
+global_batch_size: 768           # Original TRM batch size
+
+epochs: 100000
+eval_interval: 10000
+checkpoint_every_eval: True
+
+# Learning rates
+lr: 1e-4                         # Base learning rate
+lr_min_ratio: 1.0
+lr_warmup_steps: 2000
+
+# Optimizer settings
+beta1: 0.9
+beta2: 0.95
+weight_decay: 0.1
+puzzle_emb_weight_decay: 0.1
+
+# Prefix (CLS + padding) or puzzle_emb learning rate
+# Same as puzzle_emb_lr for fair comparison
+puzzle_emb_lr: 1e-2
+
+# Wandb
+project_name: TRM-Stage1
+run_name: null  # Auto-generated based on mode
+
+seed: 0
+min_eval_interval: 0
+
+ema: False
+ema_rate: 0.999
+freeze_weights: False
