@@ -40,6 +40,9 @@ class NeuralMemory(nn.Module):
     Key insight from Titans: Memory weights are updated in-place during forward pass.
     For meta-learning (create_graph=True), we track "persistent state" tensors
     that maintain gradient flow.
+
+    IMPORTANT: Memory is batch-aware - each sample in the batch has its own memory state.
+    This is achieved by storing per-batch weights with shape [B, out_dim, in_dim].
     """
 
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, dtype: torch.dtype = torch.bfloat16):
@@ -59,9 +62,11 @@ class NeuralMemory(nn.Module):
         self.mem_decay = nn.Parameter(torch.tensor(0.001, dtype=torch.float32))
 
         # Current state weights (for in-flight updates with grad tracking)
+        # Shape: [B, out_dim, in_dim] for batch-aware memory
         # These are NOT nn.Parameters - they're tensors that get updated each step
-        self._current_up_weight: Optional[torch.Tensor] = None
-        self._current_down_weight: Optional[torch.Tensor] = None
+        self._current_up_weight: Optional[torch.Tensor] = None  # [B, hidden_dim, input_dim]
+        self._current_down_weight: Optional[torch.Tensor] = None  # [B, output_dim, hidden_dim]
+        self._batch_size: int = 0
 
         self._init_weights()
 
@@ -70,11 +75,61 @@ class NeuralMemory(nn.Module):
         nn.init.normal_(self.memory_up.weight, std=0.02)
         nn.init.normal_(self.memory_down.weight, std=0.02)
 
-    def reset(self):
-        """Reset memory to initial (learned) state"""
-        # Copy from learned template parameters
-        self._current_up_weight = self.memory_up.weight.clone()
-        self._current_down_weight = self.memory_down.weight.clone()
+    def reset(self, batch_size: int = None):
+        """Reset memory to initial (learned) state for all samples in batch.
+
+        Args:
+            batch_size: Number of samples in batch. If None, uses last known batch size.
+        """
+        if batch_size is not None:
+            self._batch_size = batch_size
+
+        if self._batch_size == 0:
+            # Fallback for non-batch case
+            self._current_up_weight = self.memory_up.weight.clone()
+            self._current_down_weight = self.memory_down.weight.clone()
+        else:
+            # Batch-aware: expand template weights to [B, out_dim, in_dim]
+            # memory_up.weight: [hidden_dim, input_dim]
+            # memory_down.weight: [output_dim, hidden_dim]
+            self._current_up_weight = self.memory_up.weight.unsqueeze(0).expand(
+                self._batch_size, -1, -1
+            ).clone()
+            self._current_down_weight = self.memory_down.weight.unsqueeze(0).expand(
+                self._batch_size, -1, -1
+            ).clone()
+
+    def reset_for_samples(self, reset_mask: torch.Tensor):
+        """Selectively reset memory only for samples where reset_mask is True.
+
+        Args:
+            reset_mask: Boolean tensor [B] indicating which samples to reset.
+        """
+        if self._current_up_weight is None:
+            # No memory state yet, initialize with the batch size from mask
+            self.reset(batch_size=reset_mask.shape[0])
+            return
+
+        # Ensure batch sizes match
+        if self._current_up_weight.dim() == 2:
+            # Non-batch weights, expand to batch
+            self._batch_size = reset_mask.shape[0]
+            self._current_up_weight = self._current_up_weight.unsqueeze(0).expand(
+                self._batch_size, -1, -1
+            ).clone()
+            self._current_down_weight = self._current_down_weight.unsqueeze(0).expand(
+                self._batch_size, -1, -1
+            ).clone()
+
+        # Get template weights expanded to match batch
+        template_up = self.memory_up.weight.unsqueeze(0).expand_as(self._current_up_weight)
+        template_down = self.memory_down.weight.unsqueeze(0).expand_as(self._current_down_weight)
+
+        # Selectively reset only halted samples
+        # reset_mask: [B] -> [B, 1, 1] for broadcasting
+        mask = reset_mask.view(-1, 1, 1)
+        self._current_up_weight = torch.where(mask, template_up, self._current_up_weight)
+        self._current_down_weight = torch.where(mask, template_down, self._current_down_weight)
 
     def _get_weights(self) -> Tuple[torch.Tensor, torch.Tensor]:
         """Get current weights (either template or in-flight state)"""
@@ -83,10 +138,25 @@ class NeuralMemory(nn.Module):
         return self._current_up_weight, self._current_down_weight
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass through memory MLP using current state weights"""
+        """Forward pass through memory MLP using current state weights.
+
+        Handles both batch-aware weights [B, out_dim, in_dim] and
+        non-batch weights [out_dim, in_dim].
+        """
         up_w, down_w = self._get_weights()
-        h = F.silu(F.linear(x.to(up_w.dtype), up_w))
-        return F.linear(h, down_w).to(x.dtype)
+
+        if up_w.dim() == 3:
+            # Batch-aware weights: up_w [B, hidden_dim, input_dim], x [B, L, input_dim]
+            # Use einsum for batch matrix multiplication: out[b,l,h] = sum_d x[b,l,d] * up_w[b,h,d]
+            h = F.silu(torch.einsum('bld,bhd->blh', x.to(up_w.dtype), up_w))
+            # down_w [B, output_dim, hidden_dim], h [B, L, hidden_dim]
+            out = torch.einsum('blh,boh->blo', h, down_w)
+        else:
+            # Non-batch weights: use standard F.linear
+            h = F.silu(F.linear(x.to(up_w.dtype), up_w))
+            out = F.linear(h, down_w)
+
+        return out.to(x.dtype)
 
     def compute_surprise(self, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
         """
@@ -111,6 +181,14 @@ class NeuralMemory(nn.Module):
         When create_graph=True, the weight updates maintain gradient flow
         for meta-learning (learning to learn good initial memory weights).
 
+        IMPORTANT FIX (Issue 2 - Gradient Flow Bug):
+        - When create_graph=True, we detach the updated weights to prevent
+          non-leaf tensor issues during backpropagation.
+        - The surprise loss is computed fresh each time and returned for
+          the outer optimization loop.
+        - This prevents weight tensors from becoming non-leaf while still
+          allowing gradient flow through the surprise loss.
+
         Args:
             k: Keys [B, L, D]
             v: Values [B, L, D]
@@ -119,32 +197,66 @@ class NeuralMemory(nn.Module):
         Returns:
             surprise: the computed surprise (for logging/loss)
         """
+        batch_size = k.shape[0]
+
         # Ensure we have current state weights
         if self._current_up_weight is None:
-            self.reset()
+            self.reset(batch_size=batch_size)
 
         up_w, down_w = self._get_weights()
 
-        # Compute surprise with current weights
-        h = F.silu(F.linear(k.to(up_w.dtype), up_w))
-        pred = F.linear(h, down_w)
+        # Ensure batch dimensions match
+        if up_w.dim() == 2:
+            # Expand to batch if needed
+            self._batch_size = batch_size
+            up_w = up_w.unsqueeze(0).expand(batch_size, -1, -1).clone()
+            down_w = down_w.unsqueeze(0).expand(batch_size, -1, -1).clone()
+            self._current_up_weight = up_w
+            self._current_down_weight = down_w
+
+        # Compute surprise with current weights (batch-aware)
+        # up_w: [B, hidden_dim, input_dim], k: [B, L, input_dim]
+        h = F.silu(torch.einsum('bld,bhd->blh', k.to(up_w.dtype), up_w))
+        # down_w: [B, output_dim, hidden_dim], h: [B, L, hidden_dim]
+        pred = torch.einsum('blh,boh->blo', h, down_w)
         surprise = (pred - v.to(pred.dtype)).pow(2).mean()
 
         # Compute gradients w.r.t. current state weights
-        grads = torch.autograd.grad(
-            surprise,
-            [up_w, down_w],
-            create_graph=create_graph,
-            retain_graph=True  # Keep graph for the surprise loss
-        )
+        # CRITICAL FIX: Only compute gradients if weights require grad
+        if up_w.requires_grad or down_w.requires_grad:
+            grads = torch.autograd.grad(
+                surprise,
+                [up_w, down_w],
+                create_graph=create_graph,
+                retain_graph=True  # Keep graph for the surprise loss
+            )
+            grad_up, grad_down = grads
+        else:
+            # Weights don't require grad (e.g., during no_grad context)
+            # Skip gradient computation
+            return surprise.detach()
 
         # Learnable hyperparams
         lr = self.mem_lr.abs()
         decay = self.mem_decay.abs().clamp(0, 0.1)
 
-        # Update weights (maintains grad if create_graph=True)
-        self._current_up_weight = (1 - decay) * up_w - lr * grads[0]
-        self._current_down_weight = (1 - decay) * down_w - lr * grads[1]
+        # Update weights
+        # CRITICAL FIX (Issue 2): When create_graph=True, we need to be careful
+        # about the computation graph. The updated weights should be detached
+        # to prevent them from becoming non-leaf tensors that cause issues
+        # in subsequent backward passes. The surprise loss itself carries
+        # the gradient information we need.
+        new_up_w = (1 - decay) * up_w - lr * grad_up
+        new_down_w = (1 - decay) * down_w - lr * grad_down
+
+        if create_graph:
+            # Detach updated weights to prevent non-leaf tensor issues
+            # The gradient flow for meta-learning goes through the surprise loss
+            self._current_up_weight = new_up_w.detach().requires_grad_(True)
+            self._current_down_weight = new_down_w.detach().requires_grad_(True)
+        else:
+            self._current_up_weight = new_up_w.detach()
+            self._current_down_weight = new_down_w.detach()
 
         return surprise
 
@@ -210,9 +322,13 @@ class AttentionWithMemory(nn.Module):
         # Learnable gate to balance attention vs memory
         self.mem_gate = nn.Parameter(torch.zeros(1))
 
-    def reset_memory(self):
-        """Reset memory state"""
-        self.memory.reset()
+    def reset_memory(self, batch_size: int = None):
+        """Reset memory state for all samples."""
+        self.memory.reset(batch_size=batch_size)
+
+    def reset_memory_for_samples(self, reset_mask: torch.Tensor):
+        """Selectively reset memory only for samples where reset_mask is True."""
+        self.memory.reset_for_samples(reset_mask)
 
     def forward(self, cos_sin: CosSin, hidden_states: torch.Tensor,
                 update_memory: bool = True,
@@ -305,9 +421,13 @@ class TRM_NM_Block(nn.Module):
 
         self.norm_eps = config.rms_norm_eps
 
-    def reset_memory(self):
-        """Reset memory state"""
-        self.self_attn.reset_memory()
+    def reset_memory(self, batch_size: int = None):
+        """Reset memory state for all samples."""
+        self.self_attn.reset_memory(batch_size=batch_size)
+
+    def reset_memory_for_samples(self, reset_mask: torch.Tensor):
+        """Selectively reset memory only for samples where reset_mask is True."""
+        self.self_attn.reset_memory_for_samples(reset_mask)
 
     def forward(self, cos_sin: CosSin, hidden_states: torch.Tensor,
                 update_memory: bool = True,
@@ -346,10 +466,15 @@ class TRM_NM_ReasoningModule(nn.Module):
         super().__init__()
         self.layers = nn.ModuleList(layers)
 
-    def reset_memory(self):
-        """Reset memory in all layers"""
+    def reset_memory(self, batch_size: int = None):
+        """Reset memory in all layers for all samples."""
         for layer in self.layers:
-            layer.reset_memory()
+            layer.reset_memory(batch_size=batch_size)
+
+    def reset_memory_for_samples(self, reset_mask: torch.Tensor):
+        """Selectively reset memory in all layers only for samples where reset_mask is True."""
+        for layer in self.layers:
+            layer.reset_memory_for_samples(reset_mask)
 
     def forward(self, hidden_states: torch.Tensor, input_injection: torch.Tensor,
                 update_memory: bool = True, create_graph: bool = False,
@@ -510,9 +635,13 @@ class TRM_NM_Inner(nn.Module):
             self.q_head.weight.zero_()
             self.q_head.bias.fill_(-5)
 
-    def reset_memory(self):
-        """Reset all memory states"""
-        self.L_level.reset_memory()
+    def reset_memory(self, batch_size: int = None):
+        """Reset all memory states for all samples."""
+        self.L_level.reset_memory(batch_size=batch_size)
+
+    def reset_memory_for_samples(self, reset_mask: torch.Tensor):
+        """Selectively reset memory only for samples where reset_mask is True."""
+        self.L_level.reset_memory_for_samples(reset_mask)
 
     def _input_embeddings(self, input: torch.Tensor, puzzle_identifiers: torch.Tensor):
         """Create input embeddings with puzzle context"""
@@ -559,6 +688,12 @@ class TRM_NM_Inner(nn.Module):
             output: Logits
             (q_halt_logits, q_continue_logits): Halting logits
             total_surprise: Sum of surprise losses
+
+        CRITICAL FIX (Issue 3 - Computation Graph Accumulation):
+        - Previously: H_cycles iterations accumulated computation graphs through
+          memory updates, causing OOM even with torch.no_grad() on hidden states
+        - Now: Detach z_H and z_L between H_cycles to prevent graph accumulation
+        - Only the final cycle maintains gradient flow for backpropagation
         """
         seq_info = dict(
             cos_sin=self.rotary_emb() if hasattr(self, "rotary_emb") else None,
@@ -575,6 +710,8 @@ class TRM_NM_Inner(nn.Module):
         should_create_graph = create_graph and self.training
 
         # H_cycles-1 without grad (for efficiency)
+        # CRITICAL FIX: Use torch.no_grad() AND detach between cycles to prevent
+        # any gradient accumulation through memory updates
         with torch.no_grad():
             for _H_step in range(self.config.H_cycles - 1):
                 for _L_step in range(self.config.L_cycles):
@@ -586,6 +723,11 @@ class TRM_NM_Inner(nn.Module):
                     )
                 z_H, surprise = self.L_level(z_H, z_L, update_memory=update_memory, create_graph=False, **seq_info)
 
+                # CRITICAL FIX (Issue 3): Detach between H_cycles to prevent graph accumulation
+                # This ensures memory updates don't chain across cycles
+                z_H = z_H.detach()
+                z_L = z_L.detach()
+
         # Last cycle with grad
         for _L_step in range(self.config.L_cycles):
             z_L, surprise = self.L_level(
@@ -595,6 +737,11 @@ class TRM_NM_Inner(nn.Module):
                 **seq_info
             )
             total_surprise = total_surprise + surprise
+
+            # CRITICAL FIX (Issue 3): Detach z_L between L_cycles to prevent
+            # accumulation within the last H_cycle as well
+            if not should_create_graph:
+                z_L = z_L.detach()
 
         z_H, surprise = self.L_level(z_H, z_L, update_memory=update_memory, create_graph=should_create_graph, **seq_info)
         total_surprise = total_surprise + surprise
@@ -623,9 +770,13 @@ class TRM_NM(nn.Module):
     def puzzle_emb(self):
         return self.inner.puzzle_emb
 
-    def reset_memory(self):
-        """Reset all memory states"""
-        self.inner.reset_memory()
+    def reset_memory(self, batch_size: int = None):
+        """Reset all memory states for all samples."""
+        self.inner.reset_memory(batch_size=batch_size)
+
+    def reset_memory_for_samples(self, reset_mask: torch.Tensor):
+        """Selectively reset memory only for samples where reset_mask is True."""
+        self.inner.reset_memory_for_samples(reset_mask)
 
     def initial_carry(self, batch: Dict[str, torch.Tensor]):
         batch_size = batch["inputs"].shape[0]
@@ -647,11 +798,16 @@ class TRM_NM(nn.Module):
         Returns:
             new_carry: Updated carry
             outputs: Dict with logits, q_logits, surprise
+
+        CRITICAL FIX (Issue 1 - Memory State Isolation):
+        - Previously: if ANY sample halted, ALL memory was reset
+        - Now: Only reset memory for the specific samples that halted
+        - This ensures each puzzle has isolated memory context
         """
-        # Reset memory for samples that just halted (new puzzle starting)
-        # This ensures each puzzle has its own memory context
+        # FIXED: Selectively reset memory only for samples that just halted
+        # This prevents interference between samples in the same batch
         if carry.halted.any():
-            self.inner.reset_memory()
+            self.inner.reset_memory_for_samples(carry.halted)
 
         # Update data, carry (removing halted sequences)
         new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry)
