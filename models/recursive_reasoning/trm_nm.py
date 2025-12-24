@@ -80,8 +80,12 @@ class NeuralMemory(nn.Module):
         self.memory_down = nn.Linear(hidden_dim, output_dim, bias=False)
 
         # Learnable hyperparameters for memory update
-        self.mem_lr = nn.Parameter(torch.tensor(0.01, dtype=torch.float32))
-        self.mem_decay = nn.Parameter(torch.tensor(0.001, dtype=torch.float32))
+        # FIX Issue 1 (Memory LR Initialization): Initialize in log-space for stable learning rates
+        # Target LR ≈ 0.01: exp(-4.6) ≈ 0.01, so init to -4.6
+        # Target decay ≈ 0.001: exp(-6.9) ≈ 0.001, so init to -6.9
+        # Using exp() activation: lr = exp(mem_lr).clamp(min=0.001, max=0.1)
+        self.mem_lr = nn.Parameter(torch.tensor(-4.6, dtype=torch.float32))
+        self.mem_decay = nn.Parameter(torch.tensor(-6.9, dtype=torch.float32))
 
         # Current state weights (for in-flight updates with grad tracking)
         # Shape: [B, out_dim, in_dim] for batch-aware memory
@@ -193,13 +197,29 @@ class NeuralMemory(nn.Module):
         new_up = keep_mask * self._current_up_weight + mask_float * template_up
         new_down = keep_mask * self._current_down_weight + mask_float * template_down
 
-        # FIX Issue 1 (Gradient Flow Inconsistency): Handle gradient context appropriately
+        # FIX Issue 2 (Gradient Flow): Handle gradient context appropriately
         # During training (grad enabled): preserve gradient flow by direct assignment
+        # The arithmetic operation (keep_mask * current + mask_float * template) naturally
+        # preserves gradients for non-reset samples through the keep_mask multiplication.
         # During eval (no grad): detach and re-enable requires_grad for weight updates
         if torch.is_grad_enabled():
+            # CRITICAL FIX: Save old state BEFORE assignment for proper assertion
+            old_up_requires_grad = self._current_up_weight.requires_grad if self._current_up_weight is not None else False
+            old_down_requires_grad = self._current_down_weight.requires_grad if self._current_down_weight is not None else False
+
             # Training: direct assignment preserves gradient flow for non-reset samples
+            # Verify gradient tracking is maintained (arithmetic ops preserve it)
+            # No need for requires_grad_() since new_up/new_down inherit from inputs
             self._current_up_weight = new_up
             self._current_down_weight = new_down
+
+            # Sanity check: if old had grad, new must have grad (correct implication logic)
+            # Logic: NOT(old.requires_grad) OR new.requires_grad
+            # This fails only when old had grad but new doesn't
+            assert not old_up_requires_grad or new_up.requires_grad, \
+                "Gradient flow broken: old up_weight had requires_grad but new doesn't"
+            assert not old_down_requires_grad or new_down.requires_grad, \
+                "Gradient flow broken: old down_weight had requires_grad but new doesn't"
         else:
             # Eval: detach and re-enable requires_grad for memory update consistency
             self._current_up_weight = new_up.detach().requires_grad_(True)
@@ -232,20 +252,32 @@ class NeuralMemory(nn.Module):
 
         return out.to(x.dtype)
 
-    def compute_surprise(self, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    def compute_surprise(self, k: torch.Tensor, v: torch.Tensor,
+                         return_per_sample: bool = False) -> torch.Tensor:
         """
         Compute surprise = prediction error
+
+        FIX Issue 5 (Batch-Aware Surprise): Compute per-sample surprise first,
+        then aggregate for loss. This maintains batch isolation in memory.
 
         Args:
             k: Keys [B, L, D] - what to query
             v: Values [B, L, D] - expected output
+            return_per_sample: If True, return per-sample surprise [B] instead of scalar
 
         Returns:
-            surprise: scalar loss
+            surprise: Per-sample [B] if return_per_sample else scalar loss
         """
         pred = self.forward(k)
-        surprise = (pred - v.to(pred.dtype)).pow(2).mean()
-        return surprise
+        # FIX Issue 5: Per-sample surprise (batch-aware)
+        # Mean over sequence and feature dimensions, keep batch dimension
+        surprise_per_sample = (pred - v.to(pred.dtype)).pow(2).mean(dim=(1, 2))  # [B]
+
+        if return_per_sample:
+            return surprise_per_sample
+        else:
+            # Aggregate across batch for loss
+            return surprise_per_sample.mean()
 
     def update_memory(self, k: torch.Tensor, v: torch.Tensor,
                       create_graph: bool = False) -> torch.Tensor:
@@ -331,9 +363,12 @@ class NeuralMemory(nn.Module):
                         self._batch_size = batch_size
 
                 # Compute surprise with gradients enabled
+                # FIX Issue 5: Batch-aware surprise computation
                 h = F.silu(torch.einsum('bld,bhd->blh', k.to(up_w.dtype), up_w))
                 pred = torch.einsum('blh,boh->blo', h, down_w)
-                surprise = (pred - v.to(pred.dtype)).pow(2).mean()
+                # Per-sample surprise first, then aggregate
+                surprise_per_sample = (pred - v.to(pred.dtype)).pow(2).mean(dim=(1, 2))  # [B]
+                surprise = surprise_per_sample.mean()  # Scalar for backprop
 
                 # Compute gradients using autograd
                 grads = torch.autograd.grad(
@@ -352,9 +387,10 @@ class NeuralMemory(nn.Module):
                     grad_up = grad_up * scale
                     grad_down = grad_down * scale
 
-                # Learning rate and decay
-                lr = F.softplus(self.mem_lr) + 0.001
-                decay = F.softplus(self.mem_decay).clamp(0, 0.1)
+                # Learning rate and decay (using exp for log-space parameters)
+                # FIX Issue 1: Use exp() for log-space initialized parameters
+                lr = torch.exp(self.mem_lr).clamp(min=0.001, max=0.1)
+                decay = torch.exp(self.mem_decay).clamp(min=0.0, max=0.1)
 
                 # Update weights
                 new_up = (1 - decay) * up_w - lr * grad_up
@@ -416,11 +452,14 @@ class NeuralMemory(nn.Module):
                 self._batch_size = batch_size
 
         # Compute surprise with current weights (batch-aware)
+        # FIX Issue 5: Batch-aware surprise computation
         # up_w: [B, hidden_dim, input_dim], k: [B, L, input_dim]
         h = F.silu(torch.einsum('bld,bhd->blh', k.to(up_w.dtype), up_w))
         # down_w: [B, output_dim, hidden_dim], h: [B, L, hidden_dim]
         pred = torch.einsum('blh,boh->blo', h, down_w)
-        surprise = (pred - v.to(pred.dtype)).pow(2).mean()
+        # Per-sample surprise first, then aggregate
+        surprise_per_sample = (pred - v.to(pred.dtype)).pow(2).mean(dim=(1, 2))  # [B]
+        surprise = surprise_per_sample.mean()  # Scalar for backprop
 
         # Compute gradients w.r.t. current state weights
         # CRITICAL FIX: Only compute gradients if weights require grad
@@ -446,10 +485,10 @@ class NeuralMemory(nn.Module):
             # Skip gradient computation
             return surprise.detach()
 
-        # FIX Issue 5: Use F.softplus + minimum learning rate to prevent vanishing
-        # softplus(x) can be very small for negative x, so add a floor
-        lr = F.softplus(self.mem_lr) + 0.001  # Minimum learning rate of 0.001
-        decay = F.softplus(self.mem_decay).clamp(0, 0.1)
+        # FIX Issue 1 (Memory LR): Use exp() for log-space initialized parameters
+        # This gives stable, well-bounded learning rates
+        lr = torch.exp(self.mem_lr).clamp(min=0.001, max=0.1)
+        decay = torch.exp(self.mem_decay).clamp(min=0.0, max=0.1)
 
         # Update weights
         # CRITICAL FIX (Issue 2): When create_graph=True, we need to be careful
@@ -529,8 +568,10 @@ class AttentionWithMemory(nn.Module):
             dtype=dtype
         )
 
-        # Learnable gate to balance attention vs memory
-        self.mem_gate = nn.Parameter(torch.zeros(1))
+        # FIX Issue 4 (Titans Design): Surprise-based confidence gating
+        # Temperature for converting surprise to confidence (learnable)
+        # Low surprise = high confidence = use memory; High surprise = low confidence = use attention
+        self.surprise_temperature = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
 
     def reset_memory(self, batch_size: int = None):
         """Reset memory state for all samples."""
@@ -583,31 +624,52 @@ class AttentionWithMemory(nn.Module):
         attn_output = self.o_proj(attn_output)
 
         # === Neural Memory ===
-        # DESIGN FIX: Following Titans paper, memory should learn K->V mapping
-        # where K and V are different (not identity mapping).
-        #
-        # Key insight: Memory learns to predict what attention will output
-        # given the current input. This allows memory to "shortcut" attention
-        # for patterns it has seen before.
-        #
-        # K = hidden_states (input to attention)
-        # V = attn_output (what attention produced)
-        #
-        # This aligns with Titans' goal: memory learns to associate inputs
-        # with their corresponding transformations.
-        surprise = torch.tensor(0.0, device=hidden_states.device, dtype=torch.float32)
+        # FIX Issue 4 (Titans Design): Memory should REPLACE attention when confident
+        # Key insight from Titans paper:
+        # - Memory learns to predict attention output from input (K->V mapping)
+        # - When memory is confident (low surprise), use memory output directly
+        # - When memory is uncertain (high surprise), fall back to attention
+        # This allows memory to "shortcut" attention for patterns it has seen before.
+
+        # Memory retrieval: predict attention output without computing attention
+        mem_output = self.memory(hidden_states)
+
+        # Compute per-sample surprise for confidence estimation
+        # surprise_per_sample: [B] - average prediction error per sample
+        pred = mem_output  # Memory's prediction
+        target = attn_output  # What attention produced
+        surprise_per_sample = (pred - target.to(pred.dtype)).pow(2).mean(dim=(1, 2))  # [B]
+
+        # For loss computation, we still need scalar surprise
+        surprise = surprise_per_sample.mean()  # Scalar for backprop
 
         if update_memory:
             # Update memory: learn to predict attention output from input
             # This captures the input->output patterns of attention
             surprise = self.memory.update_memory(hidden_states, attn_output, create_graph=create_graph)
 
-        # Memory retrieval: predict attention output without computing attention
-        mem_output = self.memory(hidden_states)
+        # FIX Issue 4 (Titans Design): Surprise-based confidence gating
+        # Low surprise = high confidence = use memory; High surprise = use attention
+        #
+        # CRITICAL FIX: Use exponential decay instead of sigmoid
+        # OLD (WRONG): confidence = sigmoid(-surprise * temperature)
+        #   - When surprise = 0 (perfect prediction): sigmoid(0) = 0.5 <- Should be ~1.0!
+        #   - Memory should be fully trusted when prediction is perfect
+        #
+        # NEW (CORRECT): confidence = exp(-surprise * temperature)
+        #   - When surprise = 0: exp(0) = 1.0 <- Full memory trust
+        #   - When surprise = inf: exp(-inf) = 0.0 <- Full attention fallback
+        #   - Smooth exponential decay in between
+        temperature = F.softplus(self.surprise_temperature) + 0.1  # Ensure positive
+        confidence = torch.exp(-surprise_per_sample * temperature)  # [B]
 
-        # Gated combination of attention and memory
-        gate = torch.sigmoid(self.mem_gate)
-        output = attn_output + gate * mem_output
+        # Expand confidence for broadcasting: [B] -> [B, 1, 1]
+        confidence = confidence.view(-1, 1, 1)
+
+        # Interpolate between attention and memory based on confidence
+        # confidence=1 (low surprise): use memory
+        # confidence=0 (high surprise): use attention
+        output = confidence * mem_output + (1 - confidence) * attn_output
 
         return output, surprise
 
@@ -941,8 +1003,8 @@ class TRM_NM_Inner(nn.Module):
         should_create_graph = create_graph and self.training
 
         # H_cycles-1 without grad (for efficiency)
-        # CRITICAL FIX: Use torch.no_grad() AND detach between cycles to prevent
-        # any gradient accumulation through memory updates
+        # FIX Issue 6: torch.no_grad() already prevents gradient accumulation,
+        # so explicit detach() calls inside are redundant and removed.
         with torch.no_grad():
             for _H_step in range(self.config.H_cycles - 1):
                 for _L_step in range(self.config.L_cycles):
@@ -953,11 +1015,7 @@ class TRM_NM_Inner(nn.Module):
                         **seq_info
                     )
                 z_H, surprise = self.L_level(z_H, z_L, update_memory=update_memory, create_graph=False, **seq_info)
-
-                # CRITICAL FIX (Issue 3): Detach between H_cycles to prevent graph accumulation
-                # This ensures memory updates don't chain across cycles
-                z_H = z_H.detach()
-                z_L = z_L.detach()
+                # No detach needed inside no_grad context - gradient tracking is already disabled
 
         # Last cycle with grad
         for _L_step in range(self.config.L_cycles):
@@ -969,9 +1027,11 @@ class TRM_NM_Inner(nn.Module):
             )
             total_surprise = total_surprise + surprise
 
-            # CRITICAL FIX (Issue 3): Detach z_L between L_cycles to prevent
-            # accumulation within the last H_cycle as well
-            if not should_create_graph:
+            # CRITICAL FIX: Only detach during eval to prevent gradient graph accumulation
+            # During training (even without create_graph), we need gradients for main loss backprop
+            # Previously: detached when should_create_graph=False, which included training with create_graph=False
+            # This broke gradient flow from LM loss to earlier L_cycles
+            if not self.training:
                 z_L = z_L.detach()
 
         z_H, surprise = self.L_level(z_H, z_L, update_memory=update_memory, create_graph=should_create_graph, **seq_info)
@@ -1035,8 +1095,12 @@ class TRM_NM(nn.Module):
         - Now: Only reset memory for the specific samples that halted
         - This ensures each puzzle has isolated memory context
         """
-        # FIXED: Selectively reset memory only for samples that just halted
-        # This prevents interference between samples in the same batch
+        # NOTE: Memory reset for halted samples now happens at the END of forward (Issue 3 fix).
+        # This initial check is kept for backward compatibility with initial_carry which
+        # sets halted=True for all samples. In steady state, samples that halted in the
+        # previous iteration will already have been reset at the end of that iteration.
+        # The reset_for_samples is idempotent so double-reset is harmless but avoided
+        # by checking if memory state exists.
         if carry.halted.any():
             self.inner.reset_memory_for_samples(carry.halted)
 
@@ -1089,6 +1153,14 @@ class TRM_NM(nn.Module):
                         torch.where(is_last_step, next_q_halt_logits,
                                    torch.maximum(next_q_halt_logits, next_q_continue_logits))
                     )
+
+        # FIX Issue 3 (One-Step Delay): Reset memory IMMEDIATELY for halted samples
+        # Previously: memory reset happened at the START of the NEXT forward call,
+        # causing cross-puzzle contamination when a new puzzle started.
+        # Now: reset memory at the END of current forward, right after halting decision.
+        # This ensures memory is clean BEFORE the next puzzle's first step.
+        if halted.any():
+            self.inner.reset_memory_for_samples(halted)
 
         return TRM_NM_Carry(new_inner_carry, new_steps, halted, new_current_data), outputs
 
