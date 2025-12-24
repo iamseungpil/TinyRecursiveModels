@@ -452,7 +452,7 @@ class TRM_NM_Block(nn.Module):
             head_dim=config.hidden_size // config.num_heads,
             num_heads=config.num_heads,
             num_key_value_heads=config.num_heads,
-            memory_hidden_mult=4,
+            memory_hidden_mult=config.memory_hidden_mult,
             dtype=getattr(torch, config.forward_dtype)
         )
 
