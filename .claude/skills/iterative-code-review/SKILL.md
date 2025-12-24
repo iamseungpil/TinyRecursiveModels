@@ -1,6 +1,6 @@
 ---
 name: iterative-code-review
-description: Iteratively improve code using modular-code-architect and code-reviewer agents until production-ready. Loops: architect fixes -> reviewer checks -> repeat until no critical issues.
+description: Iteratively improve code quality by using modular-code-architect agent to fix issues and code-reviewer agent to validate quality. Use when implementing new features, after bug fixes, during refactoring, or when preparing code for production deployment. Loops until code-reviewer reports no critical issues.
 ---
 
 # Iterative Code Review
