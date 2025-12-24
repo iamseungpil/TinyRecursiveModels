@@ -1,6 +1,28 @@
 """
 TRM-NM: Tiny Recursive Model with Neural Memory (Titans-style)
 
+This module combines the Titans neural memory architecture with TRM's
+Adaptive Computation Time (ACT) framework for puzzle solving.
+
+=== TITANS CORE CONCEPTS ===
+1. Neural Memory: Stores associations in MLP weights (not activations like attention)
+2. Surprise-based Learning: Memory updates via gradient descent on prediction error
+3. K->V Mapping: Memory learns to predict attention output from input
+   - K = hidden_states (input to attention)
+   - V = attn_output (what attention produced)
+   - This allows memory to "shortcut" attention for seen patterns
+
+=== TRM CORE CONCEPTS ===
+1. Adaptive Computation Time (ACT): Variable computation based on problem complexity
+2. H_cycles/L_cycles: Hierarchical recursive reasoning structure
+3. Halting Decision: Q-head determines when to stop reasoning
+
+=== DESIGN DECISIONS ===
+1. Memory learns attention patterns (hidden_states -> attn_output), NOT identity mapping
+2. Memory is batch-aware: each sample has isolated memory state [B, dim, dim]
+3. Gradient flow: surprise loss carries meta-learning gradients, weights are detached
+4. Test-time: Only memory + puzzle_emb are trainable, rest frozen
+
 Key changes from TRM:
 1. Added Neural Memory module that learns K->V associations
 2. Memory is updated via gradient descent (surprise-based)
@@ -86,18 +108,20 @@ class NeuralMemory(nn.Module):
 
         if self._batch_size == 0:
             # Fallback for non-batch case
-            self._current_up_weight = self.memory_up.weight.clone()
-            self._current_down_weight = self.memory_down.weight.clone()
+            # CRITICAL FIX: Enable requires_grad so gradient computation works in update_memory
+            self._current_up_weight = self.memory_up.weight.clone().requires_grad_(True)
+            self._current_down_weight = self.memory_down.weight.clone().requires_grad_(True)
         else:
             # Batch-aware: expand template weights to [B, out_dim, in_dim]
             # memory_up.weight: [hidden_dim, input_dim]
             # memory_down.weight: [output_dim, hidden_dim]
+            # CRITICAL FIX: Enable requires_grad so gradient computation works in update_memory
             self._current_up_weight = self.memory_up.weight.unsqueeze(0).expand(
                 self._batch_size, -1, -1
-            ).clone()
+            ).clone().requires_grad_(True)
             self._current_down_weight = self.memory_down.weight.unsqueeze(0).expand(
                 self._batch_size, -1, -1
-            ).clone()
+            ).clone().requires_grad_(True)
 
     def reset_for_samples(self, reset_mask: torch.Tensor):
         """Selectively reset memory only for samples where reset_mask is True.
@@ -116,20 +140,27 @@ class NeuralMemory(nn.Module):
             self._batch_size = reset_mask.shape[0]
             self._current_up_weight = self._current_up_weight.unsqueeze(0).expand(
                 self._batch_size, -1, -1
-            ).clone()
+            ).clone().requires_grad_(True)
             self._current_down_weight = self._current_down_weight.unsqueeze(0).expand(
                 self._batch_size, -1, -1
-            ).clone()
+            ).clone().requires_grad_(True)
 
-        # Get template weights expanded to match batch
+        # Get template weights expanded to match batch (with requires_grad for reset samples)
         template_up = self.memory_up.weight.unsqueeze(0).expand_as(self._current_up_weight)
         template_down = self.memory_down.weight.unsqueeze(0).expand_as(self._current_down_weight)
 
         # Selectively reset only halted samples
         # reset_mask: [B] -> [B, 1, 1] for broadcasting
         mask = reset_mask.view(-1, 1, 1)
+
+        # CRITICAL FIX: torch.where doesn't preserve requires_grad properly
+        # We need to re-enable it after the operation
         self._current_up_weight = torch.where(mask, template_up, self._current_up_weight)
         self._current_down_weight = torch.where(mask, template_down, self._current_down_weight)
+
+        # Restore requires_grad for gradient computation in update_memory
+        self._current_up_weight = self._current_up_weight.requires_grad_(True)
+        self._current_down_weight = self._current_down_weight.requires_grad_(True)
 
     def _get_weights(self) -> Tuple[torch.Tensor, torch.Tensor]:
         """Get current weights (either template or in-flight state)"""
@@ -209,8 +240,9 @@ class NeuralMemory(nn.Module):
         if up_w.dim() == 2:
             # Expand to batch if needed
             self._batch_size = batch_size
-            up_w = up_w.unsqueeze(0).expand(batch_size, -1, -1).clone()
-            down_w = down_w.unsqueeze(0).expand(batch_size, -1, -1).clone()
+            # CRITICAL FIX: Enable requires_grad for gradient computation
+            up_w = up_w.unsqueeze(0).expand(batch_size, -1, -1).clone().requires_grad_(True)
+            down_w = down_w.unsqueeze(0).expand(batch_size, -1, -1).clone().requires_grad_(True)
             self._current_up_weight = up_w
             self._current_down_weight = down_w
 
@@ -255,8 +287,9 @@ class NeuralMemory(nn.Module):
             self._current_up_weight = new_up_w.detach().requires_grad_(True)
             self._current_down_weight = new_down_w.detach().requires_grad_(True)
         else:
-            self._current_up_weight = new_up_w.detach()
-            self._current_down_weight = new_down_w.detach()
+            # CRITICAL FIX: Still need requires_grad for next iteration's gradient computation
+            self._current_up_weight = new_up_w.detach().requires_grad_(True)
+            self._current_down_weight = new_down_w.detach().requires_grad_(True)
 
         return surprise
 
@@ -373,16 +406,26 @@ class AttentionWithMemory(nn.Module):
         attn_output = self.o_proj(attn_output)
 
         # === Neural Memory ===
-        # Use hidden_states directly for memory (following Titans)
-        # Memory learns: hidden_states -> hidden_states transformation
-        surprise = torch.tensor(0.0, device=hidden_states.device, dtype=hidden_states.dtype)
+        # DESIGN FIX: Following Titans paper, memory should learn K->V mapping
+        # where K and V are different (not identity mapping).
+        #
+        # Key insight: Memory learns to predict what attention will output
+        # given the current input. This allows memory to "shortcut" attention
+        # for patterns it has seen before.
+        #
+        # K = hidden_states (input to attention)
+        # V = attn_output (what attention produced)
+        #
+        # This aligns with Titans' goal: memory learns to associate inputs
+        # with their corresponding transformations.
+        surprise = torch.tensor(0.0, device=hidden_states.device, dtype=torch.float32)
 
         if update_memory:
-            # Update memory: learn to predict hidden_states from hidden_states
-            # This captures patterns in the input sequence
-            surprise = self.memory.update_memory(hidden_states, hidden_states, create_graph=create_graph)
+            # Update memory: learn to predict attention output from input
+            # This captures the input->output patterns of attention
+            surprise = self.memory.update_memory(hidden_states, attn_output, create_graph=create_graph)
 
-        # Memory retrieval
+        # Memory retrieval: predict attention output without computing attention
         mem_output = self.memory(hidden_states)
 
         # Gated combination of attention and memory
