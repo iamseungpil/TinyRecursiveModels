@@ -362,7 +362,7 @@ class TRM_NM_ReasoningModule(nn.Module):
             total_surprise: Sum of surprise from all layers
         """
         hidden_states = hidden_states + input_injection
-        total_surprise = torch.tensor(0.0, device=hidden_states.device)
+        total_surprise = torch.tensor(0.0, device=hidden_states.device, dtype=torch.float32)
 
         for layer in self.layers:
             hidden_states, surprise = layer(
@@ -535,10 +535,11 @@ class TRM_NM_Inner(nn.Module):
 
         return self.embed_scale * embedding
 
-    def empty_carry(self, batch_size: int):
+    def empty_carry(self, batch_size: int, device: torch.device = None):
+        device = device or self.H_init.device
         return TRM_NM_InnerCarry(
-            z_H=torch.empty(batch_size, self.config.seq_len + self.puzzle_emb_len, self.config.hidden_size, dtype=self.forward_dtype),
-            z_L=torch.empty(batch_size, self.config.seq_len + self.puzzle_emb_len, self.config.hidden_size, dtype=self.forward_dtype),
+            z_H=torch.empty(batch_size, self.config.seq_len + self.puzzle_emb_len, self.config.hidden_size, dtype=self.forward_dtype, device=device),
+            z_L=torch.empty(batch_size, self.config.seq_len + self.puzzle_emb_len, self.config.hidden_size, dtype=self.forward_dtype, device=device),
         )
 
     def reset_carry(self, reset_flag: torch.Tensor, carry: TRM_NM_InnerCarry):
@@ -568,7 +569,7 @@ class TRM_NM_Inner(nn.Module):
 
         # Forward iterations
         z_H, z_L = carry.z_H, carry.z_L
-        total_surprise = torch.tensor(0.0, device=z_H.device)
+        total_surprise = torch.tensor(0.0, device=z_H.device, dtype=torch.float32)
 
         # Determine if we should create graph (only for last cycle during training)
         should_create_graph = create_graph and self.training
@@ -628,11 +629,12 @@ class TRM_NM(nn.Module):
 
     def initial_carry(self, batch: Dict[str, torch.Tensor]):
         batch_size = batch["inputs"].shape[0]
+        device = batch["inputs"].device
 
         return TRM_NM_Carry(
-            inner_carry=self.inner.empty_carry(batch_size),
-            steps=torch.zeros((batch_size,), dtype=torch.int32),
-            halted=torch.ones((batch_size,), dtype=torch.bool),
+            inner_carry=self.inner.empty_carry(batch_size, device=device),
+            steps=torch.zeros((batch_size,), dtype=torch.int32, device=device),
+            halted=torch.ones((batch_size,), dtype=torch.bool, device=device),
             current_data={k: torch.empty_like(v) for k, v in batch.items()}
         )
 
@@ -646,6 +648,11 @@ class TRM_NM(nn.Module):
             new_carry: Updated carry
             outputs: Dict with logits, q_logits, surprise
         """
+        # Reset memory for samples that just halted (new puzzle starting)
+        # This ensures each puzzle has its own memory context
+        if carry.halted.any():
+            self.inner.reset_memory()
+
         # Update data, carry (removing halted sequences)
         new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry)
         new_steps = torch.where(carry.halted, 0, carry.steps)
@@ -721,7 +728,8 @@ class TRM_NM_TestTime:
     def _freeze_pretrained(self):
         """Freeze all parameters except memory and puzzle_emb"""
         for name, param in self.model.named_parameters():
-            if 'memory' in name or 'puzzle_emb' in name or 'mem_lr' in name or 'mem_decay' in name:
+            # Keep trainable: memory weights, puzzle_emb, memory hyperparams, and memory gate
+            if 'memory' in name or 'puzzle_emb' in name or 'mem_lr' in name or 'mem_decay' in name or 'mem_gate' in name:
                 param.requires_grad = True
             else:
                 param.requires_grad = False
@@ -763,6 +771,10 @@ class TRM_NM_TestTime:
             total_loss = 0
 
             for demo_x, demo_y in demo_pairs:
+                # Ensure tensors are on correct device
+                demo_x = demo_x.to(self.device)
+                demo_y = demo_y.to(self.device)
+
                 # Create batch
                 batch = {
                     "inputs": demo_x,
@@ -770,10 +782,8 @@ class TRM_NM_TestTime:
                     "puzzle_identifiers": torch.zeros(demo_x.shape[0], dtype=torch.long, device=self.device)
                 }
 
-                # Forward pass
+                # Forward pass (initial_carry now handles device correctly)
                 carry = self.model.initial_carry(batch)
-                carry.halted = carry.halted.to(self.device)
-                carry.steps = carry.steps.to(self.device)
 
                 carry, outputs = self.model(carry, batch, update_memory=True, create_graph=True)
 
@@ -810,15 +820,17 @@ class TRM_NM_TestTime:
         self.model.eval()
 
         with torch.no_grad():
+            # Ensure input is on correct device
+            test_input = test_input.to(self.device)
+
             batch = {
                 "inputs": test_input,
                 "labels": torch.zeros_like(test_input),
                 "puzzle_identifiers": torch.zeros(test_input.shape[0], dtype=torch.long, device=self.device)
             }
 
+            # initial_carry now handles device correctly
             carry = self.model.initial_carry(batch)
-            carry.halted = carry.halted.to(self.device)
-            carry.steps = carry.steps.to(self.device)
 
             # Run full ACT loop
             for _ in range(self.model.config.halt_max_steps):
