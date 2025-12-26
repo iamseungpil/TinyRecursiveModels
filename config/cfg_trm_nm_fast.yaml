@@ -1,0 +1,44 @@
+# TRM-NM Fast Training Config
+# Target: ~2 days on 4x A100 GPUs
+
+defaults:
+  - arch: trm_nm
+  - _self_
+
+hydra:
+  output_subdir: null
+
+# Data path
+data_paths: ['data/arc-aug-1000']
+data_paths_test: ['data/arc-aug-1000']
+
+# Evaluator - ARC accuracy tracking
+evaluators:
+  - name: arc@ARC
+
+# Hyperparams - Training (optimized for speed)
+global_batch_size: 256
+
+epochs: 5000
+eval_interval: 500
+checkpoint_every_eval: True
+
+lr: 1e-4
+lr_min_ratio: 1.0
+lr_warmup_steps: 500
+
+# Standard hyperparameter settings for LM, as used in Llama
+beta1: 0.9
+beta2: 0.95
+weight_decay: 0.1
+puzzle_emb_weight_decay: 0.1
+
+# Hyperparams - Puzzle embeddings training
+puzzle_emb_lr: 1e-2
+
+seed: 0
+min_eval_interval: 0
+
+ema: False
+ema_rate: 0.999
+freeze_weights: False

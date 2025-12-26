@@ -237,6 +237,11 @@ class NeuralMemory(nn.Module):
         Handles both batch-aware weights [B, out_dim, in_dim] and
         non-batch weights [out_dim, in_dim].
         """
+        # FIX Issue #4: Device mismatch assertion
+        module_device = self.memory_up.weight.device
+        assert x.device == module_device, \
+            f"Input x device ({x.device}) doesn't match module device ({module_device})"
+
         up_w, down_w = self._get_weights()
 
         if up_w.dim() == 3:
@@ -316,6 +321,14 @@ class NeuralMemory(nn.Module):
         """
         batch_size = k.shape[0]
 
+        # FIX Issue #4: Device mismatch assertion
+        # Ensure input tensors are on the same device as module weights
+        module_device = self.memory_up.weight.device
+        assert k.device == module_device, \
+            f"Input k device ({k.device}) doesn't match module device ({module_device})"
+        assert v.device == module_device, \
+            f"Input v device ({v.device}) doesn't match module device ({module_device})"
+
         # FIX Issue 6: Empty batch should raise error, not return silent 0.0
         # Silent return can cause shape mismatch issues downstream
         if batch_size == 0:
@@ -380,8 +393,9 @@ class NeuralMemory(nn.Module):
                 grad_up, grad_down = grads
 
                 # Gradient clipping
+                # FIX Issue #2: Reduce max_norm from 10.0 to 1.0 for bfloat16 stability
                 grad_norm = torch.sqrt(grad_up.pow(2).sum() + grad_down.pow(2).sum() + 1e-8)
-                max_norm = 10.0
+                max_norm = 1.0
                 if grad_norm > max_norm:
                     scale = max_norm / grad_norm
                     grad_up = grad_up * scale
@@ -474,8 +488,9 @@ class NeuralMemory(nn.Module):
 
             # FIX Issue 4: Norm-based gradient clipping instead of element-wise
             # Element-wise clipping is too restrictive and can distort gradient direction
+            # FIX Issue #2: Reduce max_norm from 10.0 to 1.0 for bfloat16 stability
             grad_norm = torch.sqrt(grad_up.pow(2).sum() + grad_down.pow(2).sum() + 1e-8)
-            max_norm = 10.0
+            max_norm = 1.0
             if grad_norm > max_norm:
                 scale = max_norm / grad_norm
                 grad_up = grad_up * scale
@@ -661,7 +676,11 @@ class AttentionWithMemory(nn.Module):
         #   - When surprise = inf: exp(-inf) = 0.0 <- Full attention fallback
         #   - Smooth exponential decay in between
         temperature = F.softplus(self.surprise_temperature) + 0.1  # Ensure positive
-        confidence = torch.exp(-surprise_per_sample * temperature)  # [B]
+        # FIX Issue #3: Clamp surprise before exponential to prevent underflow
+        # When surprise * temperature > 50, exp() underflows to 0 in bfloat16
+        # Clamp to ensure -surprise * temperature >= -50
+        surprise_clamped = surprise_per_sample.clamp(max=50.0 / (temperature + 1e-6))
+        confidence = torch.exp(-surprise_clamped * temperature)  # [B]
 
         # Expand confidence for broadcasting: [B] -> [B, 1, 1]
         confidence = confidence.view(-1, 1, 1)
@@ -1037,6 +1056,13 @@ class TRM_NM_Inner(nn.Module):
         z_H, surprise = self.L_level(z_H, z_L, update_memory=update_memory, create_graph=should_create_graph, **seq_info)
         total_surprise = total_surprise + surprise
 
+        # FIX Issue #5: Normalize surprise by number of terms to prevent over-weighting
+        # Each L_level call returns sum of L_layers surprises
+        # We have (L_cycles + 1) L_level calls in the last H_cycle
+        # Total surprise terms = (L_cycles + 1) * L_layers
+        num_surprise_terms = (self.config.L_cycles + 1) * len(self.L_level.layers)
+        total_surprise = total_surprise / num_surprise_terms
+
         # Outputs
         new_carry = TRM_NM_InnerCarry(z_H=z_H.detach(), z_L=z_L.detach())
         output = self.lm_head(z_H)[:, self.puzzle_emb_len:]
@@ -1095,12 +1121,14 @@ class TRM_NM(nn.Module):
         - Now: Only reset memory for the specific samples that halted
         - This ensures each puzzle has isolated memory context
         """
-        # NOTE: Memory reset for halted samples now happens at the END of forward (Issue 3 fix).
-        # This initial check is kept for backward compatibility with initial_carry which
-        # sets halted=True for all samples. In steady state, samples that halted in the
-        # previous iteration will already have been reset at the end of that iteration.
-        # The reset_for_samples is idempotent so double-reset is harmless but avoided
-        # by checking if memory state exists.
+        # FIX Issue #1 (Memory State Accumulation - Part 1 of 2):
+        # Memory reset happens at two points to handle all cases:
+        # 1. HERE (start of forward): For samples that halted in PREVIOUS iteration
+        #    - Required for initial_carry which sets halted=True without prior reset
+        #    - Redundant (but harmless) in steady state since END-of-forward reset already ran
+        # 2. END of forward: For samples that halt in CURRENT iteration
+        #    - Ensures memory is clean BEFORE next puzzle starts (see Issue #1 fix below)
+        # Together these ensure memory never persists across puzzle boundaries.
         if carry.halted.any():
             self.inner.reset_memory_for_samples(carry.halted)
 
@@ -1154,11 +1182,11 @@ class TRM_NM(nn.Module):
                                    torch.maximum(next_q_halt_logits, next_q_continue_logits))
                     )
 
-        # FIX Issue 3 (One-Step Delay): Reset memory IMMEDIATELY for halted samples
-        # Previously: memory reset happened at the START of the NEXT forward call,
-        # causing cross-puzzle contamination when a new puzzle started.
-        # Now: reset memory at the END of current forward, right after halting decision.
-        # This ensures memory is clean BEFORE the next puzzle's first step.
+        # FIX Issue #1 (Memory State Accumulation): Reset memory BEFORE returning carry
+        # CRITICAL: This reset MUST happen after halting decision but BEFORE return
+        # to ensure memory is clean for the next puzzle when halted samples restart.
+        # The carry (new_inner_carry) contains z_H/z_L which will be reset by reset_carry()
+        # in the next iteration for halted samples, so they're in sync with reset memory.
         if halted.any():
             self.inner.reset_memory_for_samples(halted)
 

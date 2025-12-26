@@ -17,7 +17,9 @@ import coolname
 import hydra
 import pydantic
 from omegaconf import DictConfig
-from adam_atan2 import AdamATan2
+# from adam_atan2 import AdamATan2  # Disabled: requires triton backend
+# Using AdamW as fallback
+AdamATan2 = torch.optim.AdamW
 
 from puzzle_dataset import PuzzleDataset, PuzzleDatasetConfig, PuzzleDatasetMetadata
 from utils.functions import load_model_class, get_model_source_path
@@ -354,7 +356,9 @@ def evaluate(
 ):
     reduced_metrics = None
 
-    with torch.inference_mode():
+    # Use no_grad instead of inference_mode for TRM-NM compatibility
+    # TRM-NM's memory update uses torch.enable_grad() internally during eval
+    with torch.no_grad():
         return_keys = set(config.eval_save_outputs)
         for evaluator in evaluators:
             evaluator.begin_eval()
