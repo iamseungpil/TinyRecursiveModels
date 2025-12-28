@@ -1,0 +1,30 @@
+name: recursive_reasoning.trm_titans@TRM_Titans
+loss:
+  name: recursive_reasoning.trm_titans@TRM_Titans_ACTLossHead
+  loss_type: stablemax_cross_entropy
+
+halt_exploration_prob: 0.1
+halt_max_steps: 16
+
+H_cycles: 3
+L_cycles: 6
+
+H_layers: 0  # ignored in TRM-Titans
+L_layers: 2
+
+hidden_size: 512
+num_heads: 8  # min(2, hidden_size // 64)
+expansion: 4
+
+puzzle_emb_ndim: ${.hidden_size}
+
+pos_encodings: rope
+forward_dtype: bfloat16
+
+puzzle_emb_len: 16 # if non-zero, its specified to this value
+no_ACT_continue: True # No continue ACT loss, only use the sigmoid of the halt
+
+# TRM-Titans specific: Memory parameters
+# Key difference from TRM-NM: Memory weights ARE the state (no z_H, z_L)
+memory_hidden_mult: 4  # Memory MLP hidden dimension multiplier (hidden_size * mult)
+surprise_loss_weight: 0.1  # Weight for surprise loss in total loss

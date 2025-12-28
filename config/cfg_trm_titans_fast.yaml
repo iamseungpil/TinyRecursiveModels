@@ -1,0 +1,52 @@
+# TRM-Titans Fast Training Config
+# Target: ~2 days on 8x A100 GPUs
+# Key: MLP memory replaces z_H, z_L (Titans-style implicit state)
+
+defaults:
+  - arch: trm_titans
+  - _self_
+
+hydra:
+  output_subdir: null
+
+# Data path
+data_paths: ['data/arc-aug-1000']
+data_paths_test: ['data/arc-aug-1000']
+
+# Evaluator - ARC accuracy tracking
+evaluators:
+  - name: arc@ARC
+
+# Hyperparams - Training (optimized for speed)
+# Increased to 192 for more stable gradients (GPU memory ~65GB/80GB expected)
+global_batch_size: 192
+
+epochs: 5000
+eval_interval: 500
+checkpoint_every_eval: True
+
+lr: 1e-4
+lr_min_ratio: 1.0
+lr_warmup_steps: 500
+
+# Standard hyperparameter settings for LM, as used in Llama
+beta1: 0.9
+beta2: 0.95
+weight_decay: 0.1
+puzzle_emb_weight_decay: 0.1
+
+# Hyperparams - Puzzle embeddings training
+puzzle_emb_lr: 1e-2
+
+seed: 0
+min_eval_interval: 0
+
+ema: False
+ema_rate: 0.999
+freeze_weights: False
+
+checkpoint_path: /data/TinyRecursiveModels/checkpoints/trm_titans_fast
+
+# W&B settings
+project_name: TRM_Titans_Training
+run_name: trm_titans_fast_v9
