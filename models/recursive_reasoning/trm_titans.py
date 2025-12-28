@@ -1232,9 +1232,26 @@ class TRM_Titans_TestTime:
         self._freeze_pretrained()
 
     def _freeze_pretrained(self):
-        """Freeze all parameters except memory and puzzle_emb."""
+        """Freeze all parameters except memory modules and puzzle embeddings.
+
+        Learnable at test-time:
+        - inner.memory_H.* (high-level memory)
+        - inner.memory_L.* (low-level memory)
+        - *.self_attn.memory.* (attention layer memories)
+        - *.mem_lr, *.mem_decay (memory hyperparameters)
+        - inner.puzzle_emb.* (puzzle embeddings)
+        """
         for name, param in self.model.named_parameters():
-            if 'memory' in name or 'puzzle_emb' in name or 'mem_lr' in name or 'mem_decay' in name:
+            # Specific patterns for memory-related parameters
+            is_titans_memory = (
+                '.memory_H.' in name or
+                '.memory_L.' in name or
+                '.self_attn.memory.' in name
+            )
+            is_mem_hyperparam = '.mem_lr' in name or '.mem_decay' in name
+            is_puzzle_emb = '.puzzle_emb.' in name
+
+            if is_titans_memory or is_mem_hyperparam or is_puzzle_emb:
                 param.requires_grad = True
             else:
                 param.requires_grad = False
@@ -1247,16 +1264,39 @@ class TRM_Titans_TestTime:
         self,
         demo_pairs: List[Tuple[torch.Tensor, torch.Tensor]],
         n_steps: int = 5,
-        lr: float = 0.01
+        lr: float = 0.01,
+        puzzle_id: int = 0,
+        verbose: bool = False
     ):
-        """Adapt model to a new puzzle using demo pairs."""
-        self.model.reset_all_memory()
+        """Adapt model to a new puzzle using demo pairs.
+
+        Args:
+            demo_pairs: List of (input, target) demo pairs
+            n_steps: Number of adaptation steps
+            lr: Learning rate for adaptation
+            puzzle_id: Puzzle identifier for puzzle embedding (default: 0)
+            verbose: Whether to print loss progression (default: False)
+
+        Raises:
+            ValueError: If demo_pairs is empty
+        """
+        # Validate input
+        if not demo_pairs:
+            raise ValueError("demo_pairs cannot be empty for test-time adaptation")
+
+        # Memory will be reset with correct batch size on first forward pass.
+        # Flow: initial_carry creates halted=True -> forward calls reset_memory_for_samples(halted)
+        # -> TitansMemory.reset_for_samples initializes weights with correct batch_size
         optimizer = torch.optim.Adam(self.get_learnable_params(), lr=lr)
         self.model.train()
 
-        for step in range(n_steps):
-            total_loss = 0
+        num_demos = len(demo_pairs)
 
+        for step in range(n_steps):
+            optimizer.zero_grad()
+            total_loss_value = 0.0
+
+            # Use gradient accumulation pattern for memory efficiency
             for demo_x, demo_y in demo_pairs:
                 demo_x = demo_x.to(self.device)
                 demo_y = demo_y.to(self.device)
@@ -1264,7 +1304,7 @@ class TRM_Titans_TestTime:
                 batch = {
                     "inputs": demo_x,
                     "labels": demo_y,
-                    "puzzle_identifiers": torch.zeros(demo_x.shape[0], dtype=torch.long, device=self.device)
+                    "puzzle_identifiers": torch.full((demo_x.shape[0],), puzzle_id, dtype=torch.long, device=self.device)
                 }
 
                 carry = self.model.initial_carry(batch)
@@ -1279,16 +1319,36 @@ class TRM_Titans_TestTime:
                     ignore_index=IGNORE_LABEL_ID
                 )
                 loss = loss + self.model.config.surprise_loss_weight * outputs["surprise"]
-                total_loss = total_loss + loss
 
-            optimizer.zero_grad()
-            total_loss.backward()
+                # Normalize by number of demos and backprop immediately (gradient accumulation)
+                (loss / num_demos).backward()
+                total_loss_value += loss.item()
+
             optimizer.step()
+
+            if verbose:
+                avg_loss = total_loss_value / num_demos
+                print(f"Step {step+1}/{n_steps}, Loss: {avg_loss:.4f}")
 
         self.model.eval()
 
-    def predict(self, test_input: torch.Tensor) -> torch.Tensor:
-        """Make prediction after adaptation."""
+    def predict(
+        self,
+        test_input: torch.Tensor,
+        update_during_prediction: bool = False,
+        puzzle_id: int = 0
+    ) -> torch.Tensor:
+        """Make prediction after adaptation.
+
+        Args:
+            test_input: Input tensor for prediction [B, L]
+            update_during_prediction: Whether to continue updating memory during prediction.
+                                      True allows online refinement, False gives deterministic output.
+            puzzle_id: Puzzle identifier (should match the one used in test_time_adapt)
+
+        Returns:
+            predictions: Predicted token IDs (argmax of logits) [B, L]
+        """
         self.model.eval()
 
         with torch.no_grad():
@@ -1297,13 +1357,13 @@ class TRM_Titans_TestTime:
             batch = {
                 "inputs": test_input,
                 "labels": torch.zeros_like(test_input),
-                "puzzle_identifiers": torch.zeros(test_input.shape[0], dtype=torch.long, device=self.device)
+                "puzzle_identifiers": torch.full((test_input.shape[0],), puzzle_id, dtype=torch.long, device=self.device)
             }
 
             carry = self.model.initial_carry(batch)
 
             for _ in range(self.model.config.halt_max_steps):
-                carry, outputs = self.model(carry, batch, update_memory=False, create_graph=False)
+                carry, outputs = self.model(carry, batch, update_memory=update_during_prediction, create_graph=False)
                 if carry.halted.all():
                     break
 
