@@ -49,4 +49,4 @@ checkpoint_path: /data/TinyRecursiveModels/checkpoints/trm_titans_fast
 
 # W&B settings
 project_name: TRM_Titans_Training
-run_name: trm_titans_fast_v9
+run_name: trm_titans_fast_v11_surprise_fix

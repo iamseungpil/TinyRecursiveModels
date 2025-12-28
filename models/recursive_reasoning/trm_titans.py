@@ -28,6 +28,7 @@ from typing import Tuple, List, Dict, Optional
 from dataclasses import dataclass
 from contextlib import nullcontext
 import math
+import warnings
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -116,9 +117,10 @@ class TitansMemory(nn.Module):
         self.template_up = nn.Linear(input_dim, hidden_dim, bias=False)
         self.template_down = nn.Linear(hidden_dim, output_dim, bias=False)
 
-        # Learnable hyperparameters for memory update
-        # Initialize in log-space for stable learning rates
-        # exp(-4.6) ~= 0.01, exp(-6.9) ~= 0.001
+        # Memory update hyperparameters (stored in log-space)
+        # NOTE: These are nn.Parameters for convenience but do NOT receive gradients
+        # in the current design (we return pre-update surprise, not post-update).
+        # exp(-4.6) ~= 0.01 (learning rate), exp(-6.9) ~= 0.001 (decay)
         self.mem_lr = nn.Parameter(torch.tensor(-4.6, dtype=torch.float32))
         self.mem_decay = nn.Parameter(torch.tensor(-6.9, dtype=torch.float32))
 
@@ -271,6 +273,12 @@ class TitansMemory(nn.Module):
             up_w, down_w = self._get_weights()
         elif up_w.shape[0] != batch_size:
             if batch_size < up_w.shape[0]:
+                # FIX #3: Warn when batch size shrinks (may indicate a bug)
+                warnings.warn(
+                    f"TitansMemory: Batch size shrunk from {up_w.shape[0]} to {batch_size}. "
+                    "Truncating memory weights. This may indicate a bug in batch handling.",
+                    stacklevel=2
+                )
                 up_w = up_w[:batch_size].contiguous()
                 down_w = down_w[:batch_size].contiguous()
                 self._current_up_weight = up_w
@@ -337,23 +345,23 @@ class TitansMemory(nn.Module):
             new_up = (1 - decay) * up_w - lr * grad_up
             new_down = (1 - decay) * down_w - lr * grad_down
 
-            # Compute "lookahead" surprise using updated weights
-            # This makes mem_lr and mem_decay part of the returned loss computation
-            # Rationale: We want to learn mem_lr/mem_decay such that the memory update
-            # reduces future prediction error. By computing surprise on new_up/new_down,
-            # gradients flow back through the update equation to mem_lr/mem_decay.
-            h_new = F.silu(torch.einsum('bld,bhd->blh', k.to(new_up.dtype), new_up))
-            pred_new = torch.einsum('blh,boh->blo', h_new, new_down)
-            new_surprise_per_sample = (pred_new - v.to(pred_new.dtype)).pow(2).mean(dim=(1, 2))
-            new_surprise = new_surprise_per_sample.mean()
-
             # Store updated weights (detach to prevent infinite graph growth)
+            # The memory update is a side effect; we don't need the lookahead surprise.
             self._current_up_weight = new_up.detach().requires_grad_(True)
             self._current_down_weight = new_down.detach().requires_grad_(True)
 
-            # Return the NEW surprise which depends on mem_lr and mem_decay
-            # This allows these parameters to receive gradients during backprop
-            return new_surprise
+            # Return pre-update surprise (current prediction error)
+            #
+            # Design decision: We return the CURRENT prediction error (surprise), not
+            # the post-update error (new_surprise). This means:
+            # - The model optimizes for current prediction accuracy (standard learning)
+            # - NOT for how well the memory update improves predictions (meta-learning)
+            #
+            # Note on mem_lr/mem_decay: These are nn.Parameters for convenience but
+            # do NOT receive gradients with this design. The memory update is a side
+            # effect that happens during forward pass. If meta-learning is desired,
+            # return new_surprise instead and mem_lr/mem_decay will receive gradients.
+            return surprise
         else:
             # No gradient flow needed - use torch.no_grad for efficiency
             with torch.no_grad():
@@ -959,16 +967,26 @@ class TRM_Titans_Inner(nn.Module):
         # This prevents NCCL timeout from GPU desync during distributed training
         _sync_if_distributed()
 
-        # Normalize surprise (account for whether memory updates were included)
-        # With update_memory=True: layer surprises + memory surprises
-        # With update_memory=False: only layer surprises
+        # Normalize surprise by the number of surprise terms accumulated
+        #
+        # Surprise counting in the final H_cycle (with gradients):
+        # - L_cycles calls to L_level.forward(): each returns SUM of n_layers surprises
+        # - 1 H_update call to L_level.forward(): returns SUM of n_layers surprises
+        # - If update_memory:
+        #   - L_cycles calls to memory_L.update(): each returns 1 surprise
+        #   - 1 call to memory_H.update(): returns 1 surprise
+        #
+        # Total individual surprise terms:
+        # - Layer surprises: (L_cycles + 1) * n_layers
+        # - Memory surprises: (L_cycles + 1) if update_memory
         n_layers = len(self.L_level.layers)
+        n_forward_calls = self.config.L_cycles + 1
         if update_memory:
-            # (L_cycles + 1 H_update) * (n_layers + 1 memory) terms
-            num_surprise_terms = (self.config.L_cycles + 1) * (n_layers + 1)
+            # (L_cycles + 1) * n_layers layer surprises + (L_cycles + 1) memory surprises
+            num_surprise_terms = n_forward_calls * (n_layers + 1)
         else:
-            # (L_cycles + 1 H_update) * n_layers terms (no memory surprises)
-            num_surprise_terms = (self.config.L_cycles + 1) * n_layers
+            # Only layer surprises
+            num_surprise_terms = n_forward_calls * n_layers
         total_surprise = total_surprise / max(num_surprise_terms, 1)
 
         # Outputs (use H state for final prediction)
