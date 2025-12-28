@@ -861,13 +861,21 @@ class TRM_Titans_Inner(nn.Module):
         should_create_graph = create_graph and self.training
 
         # Initialize memory state if needed (check all memory modules for consistency)
-        needs_reset = (
+        # Check top-level memories
+        top_level_needs_reset = (
             self.memory_H._current_up_weight is None or
             self.memory_L._current_up_weight is None or
             self.memory_H._batch_size != batch_size or
             self.memory_L._batch_size != batch_size or
-            self.memory_H._batch_size != self.memory_L._batch_size  # Cross-memory consistency
+            self.memory_H._batch_size != self.memory_L._batch_size
         )
+        # Check layer memories for consistency
+        layer_needs_reset = any(
+            layer.self_attn.memory._current_up_weight is not None and
+            layer.self_attn.memory._batch_size != batch_size
+            for layer in self.L_level.layers
+        )
+        needs_reset = top_level_needs_reset or layer_needs_reset
         if needs_reset:
             self.reset_all_memory(batch_size=batch_size, device=device)
 
@@ -886,9 +894,10 @@ class TRM_Titans_Inner(nn.Module):
             for _H_step in range(self.config.H_cycles - 1):
                 # L_cycles: update L state based on H state + input
                 for _L_step in range(self.config.L_cycles):
-                    l_input = l_state + h_state + input_embeddings
+                    # Match Original TRM: injection = z_H + input (NOT l_state + z_H + input)
+                    l_injection = h_state + input_embeddings
                     l_state, surprise = self.L_level(
-                        l_state, l_input,
+                        l_state, l_injection,
                         update_memory=update_memory,
                         create_graph=False,
                         **seq_info
@@ -898,9 +907,10 @@ class TRM_Titans_Inner(nn.Module):
                         self.memory_L.update(input_embeddings, l_state, create_graph=False)
 
                 # Update H state based on L state
-                h_input = h_state + l_state
+                # Match Original TRM: injection = z_L only (NOT h_state + z_L)
+                h_injection = l_state
                 h_state, surprise = self.L_level(
-                    h_state, h_input,
+                    h_state, h_injection,
                     update_memory=update_memory,
                     create_graph=False,
                     **seq_info
@@ -911,9 +921,10 @@ class TRM_Titans_Inner(nn.Module):
 
         # Final H_cycle with grad
         for _L_step in range(self.config.L_cycles):
-            l_input = l_state + h_state + input_embeddings
+            # Match Original TRM: injection = z_H + input (NOT l_state + z_H + input)
+            l_injection = h_state + input_embeddings
             l_state, surprise = self.L_level(
-                l_state, l_input,
+                l_state, l_injection,
                 update_memory=update_memory,
                 create_graph=should_create_graph,
                 **seq_info
@@ -925,9 +936,10 @@ class TRM_Titans_Inner(nn.Module):
                 total_surprise = total_surprise + mem_surprise
 
         # Final H update
-        h_input = h_state + l_state
+        # Match Original TRM: injection = z_L only (NOT h_state + z_L)
+        h_injection = l_state
         h_state, surprise = self.L_level(
-            h_state, h_input,
+            h_state, h_injection,
             update_memory=update_memory,
             create_graph=should_create_graph,
             **seq_info
@@ -947,8 +959,16 @@ class TRM_Titans_Inner(nn.Module):
         # This prevents NCCL timeout from GPU desync during distributed training
         _sync_if_distributed()
 
-        # Normalize surprise
-        num_surprise_terms = (self.config.L_cycles + 1) * (len(self.L_level.layers) + 1)
+        # Normalize surprise (account for whether memory updates were included)
+        # With update_memory=True: layer surprises + memory surprises
+        # With update_memory=False: only layer surprises
+        n_layers = len(self.L_level.layers)
+        if update_memory:
+            # (L_cycles + 1 H_update) * (n_layers + 1 memory) terms
+            num_surprise_terms = (self.config.L_cycles + 1) * (n_layers + 1)
+        else:
+            # (L_cycles + 1 H_update) * n_layers terms (no memory surprises)
+            num_surprise_terms = (self.config.L_cycles + 1) * n_layers
         total_surprise = total_surprise / max(num_surprise_terms, 1)
 
         # Outputs (use H state for final prediction)
