@@ -1,5 +1,5 @@
 # TRM-Titans Fast Training Config
-# Target: ~2 days on 8x A100 GPUs
+# Target: ~12 hours on 8x A100 GPUs (eval every ~3 hours)
 # Key: MLP memory replaces z_H, z_L (Titans-style implicit state)
 
 defaults:
@@ -21,13 +21,16 @@ evaluators:
 # Increased to 192 for more stable gradients (GPU memory ~65GB/80GB expected)
 global_batch_size: 192
 
-epochs: 5000
-eval_interval: 500
+# 12-hour training schedule:
+# - 128 epochs total ≈ 20,480 steps ≈ 12 hours @ 2.12s/step
+# - eval every 32 epochs ≈ 5,120 steps ≈ 3 hours
+epochs: 128
+eval_interval: 32
 checkpoint_every_eval: True
 
 lr: 1e-4
 lr_min_ratio: 1.0
-lr_warmup_steps: 500
+lr_warmup_steps: 50
 
 # Standard hyperparameter settings for LM, as used in Llama
 beta1: 0.9
@@ -49,4 +52,4 @@ checkpoint_path: /data/TinyRecursiveModels/checkpoints/trm_titans_fast
 
 # W&B settings
 project_name: TRM_Titans_Training
-run_name: trm_titans_fast_v11_surprise_fix
+run_name: trm_titans_fast_v12_12h
