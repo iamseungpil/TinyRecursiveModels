@@ -3,7 +3,7 @@ TRM-Titans: Tiny Recursive Model with Titans-style Implicit Memory
 
 This module implements the Titans architecture where:
 - Memory weights ARE the state (no explicit z_H, z_L tensors)
-- Two MLP memories replace z_H and z_L roles
+- Layer memories inside L_level blocks replace z_H, z_L roles
 - Memory updates happen via gradient descent on prediction error
 
 === TITANS CORE CONCEPTS ===
@@ -17,11 +17,12 @@ This module implements the Titans architecture where:
 - TRM-Titans: NO z_H, z_L tensors - memory weights ARE the implicit state
 
 === ARCHITECTURE ===
-- memory_H: High-level reasoning memory (replaces z_H)
-- memory_L: Low-level computation memory (replaces z_L)
-- Each memory is a 2-layer MLP with batch-aware per-sample weights
-- H_cycles: Number of high-level memory updates
-- L_cycles: Number of low-level memory updates per H_cycle
+- Only L_level exists (like original TRM, H_layers config is ignored)
+- Layer memories inside each L_level block serve as implicit state
+- Each layer has TitansMemory (2-layer MLP) for implicit state storage
+- H_cycles: Number of high-level reasoning cycles
+- L_cycles: Number of low-level computation cycles per H_cycle
+- Both H and L updates use the same L_level module (like original TRM)
 
 === TITANS LOSS DESIGN ===
 The Titans paper specifies that memory should learn during forward pass only:
@@ -1075,7 +1076,7 @@ class TRM_Titans_Config(BaseModel):
     H_cycles: int
     L_cycles: int
 
-    H_layers: int  # Number of layers for H_level (high-level reasoning)
+    H_layers: int  # ignored (like original TRM) - only L_level is used
     L_layers: int
 
     # Transformer config
@@ -1143,10 +1144,11 @@ class TRM_Titans_Inner(nn.Module):
     """
     Inner model for TRM-Titans.
 
-    Key difference from TRM/TRM-NM:
+    Architecture (matches original TRM with Titans memory):
     - NO z_H, z_L tensors in carry
-    - memory_H and memory_L modules store state in their weights
-    - H_cycles update memory_H, L_cycles update memory_L within each H_cycle
+    - Only L_level exists (like original TRM, H_layers is ignored)
+    - Layer memories inside L_level blocks store state in their weights
+    - H/L cycles structure: L_cycles per H_cycle, H update uses L_level
     """
 
     def __init__(self, config: TRM_Titans_Config) -> None:
@@ -1196,29 +1198,8 @@ class TRM_Titans_Inner(nn.Module):
                 cast_to=self.forward_dtype
             )
 
-        # Titans Memory Modules (REPLACES z_H, z_L)
-        # memory_H: High-level reasoning memory
-        self.memory_H = TitansMemory(
-            input_dim=self.config.hidden_size,
-            hidden_dim=self.config.hidden_size * self.config.memory_hidden_mult,
-            output_dim=self.config.hidden_size,
-            dtype=self.forward_dtype
-        )
-
-        # memory_L: Low-level computation memory
-        self.memory_L = TitansMemory(
-            input_dim=self.config.hidden_size,
-            hidden_dim=self.config.hidden_size * self.config.memory_hidden_mult,
-            output_dim=self.config.hidden_size,
-            dtype=self.forward_dtype
-        )
-
-        # H_level for high-level reasoning (used in H_cycles for h_state updates)
-        self.H_level = TRM_Titans_ReasoningModule(
-            layers=[TRM_Titans_Block(self.config) for _ in range(self.config.H_layers)]
-        )
-
-        # L_level for low-level computation (used in L_cycles for l_state updates)
+        # L_level: Single reasoning module (like original TRM)
+        # Layer memories inside each block serve as implicit state (replacing z_H, z_L)
         self.L_level = TRM_Titans_ReasoningModule(
             layers=[TRM_Titans_Block(self.config) for _ in range(self.config.L_layers)]
         )
@@ -1229,17 +1210,11 @@ class TRM_Titans_Inner(nn.Module):
             self.q_head.bias.fill_(-5)
 
     def reset_all_memory(self, batch_size: int, device: torch.device = None):
-        """Reset all memory states (memory_H, memory_L, H_level and L_level memories)."""
-        self.memory_H.reset(batch_size=batch_size, device=device)
-        self.memory_L.reset(batch_size=batch_size, device=device)
-        self.H_level.reset_memory(batch_size=batch_size, device=device)
+        """Reset all layer memory states in L_level."""
         self.L_level.reset_memory(batch_size=batch_size, device=device)
 
     def reset_memory_for_samples(self, reset_mask: torch.Tensor):
         """Selectively reset memory for specific samples."""
-        self.memory_H.reset_for_samples(reset_mask)
-        self.memory_L.reset_for_samples(reset_mask)
-        self.H_level.reset_memory_for_samples(reset_mask)
         self.L_level.reset_memory_for_samples(reset_mask)
 
     def _input_embeddings(self, input: torch.Tensor, puzzle_identifiers: torch.Tensor):
@@ -1281,19 +1256,16 @@ class TRM_Titans_Inner(nn.Module):
         """
         Forward pass using Titans-style memory iteration.
 
-        Key insight: No z_H, z_L tensors passed through.
-        Instead, memory_H and memory_L store state in their weights.
-
-        Forward structure:
-        - Input embeddings provide the "query" to memory
-        - H_cycles: Update memory_H based on memory_L output
-        - L_cycles: Update memory_L based on memory_H output + input
+        Architecture (matches original TRM with Titans memory):
+        - Layer memories inside L_level blocks serve as implicit state
+        - Only L_level exists (like original TRM, H_layers is ignored)
+        - H/L cycles structure: L_cycles per H_cycle, H update also uses L_level
 
         Returns:
             new_carry: Updated carry (minimal)
             output: LM logits
             (q_halt_logits, q_continue_logits): Halting logits
-            total_surprise: Sum of memory surprises
+            total_surprise: Sum of layer memory surprises
         """
         batch_size = batch["inputs"].shape[0]
         device = batch["inputs"].device
@@ -1308,41 +1280,30 @@ class TRM_Titans_Inner(nn.Module):
         total_surprise = torch.tensor(0.0, device=device, dtype=torch.float32)
         should_create_graph = create_graph and self.training
 
-        # Initialize memory state if needed (check all memory modules for consistency)
-        # Check top-level memories
-        top_level_needs_reset = (
-            self.memory_H._current_up_weight is None or
-            self.memory_L._current_up_weight is None or
-            self.memory_H._batch_size != batch_size or
-            self.memory_L._batch_size != batch_size or
-            self.memory_H._batch_size != self.memory_L._batch_size
-        )
-        # Check layer memories for consistency (both H_level and L_level)
-        layer_needs_reset = any(
-            layer.self_attn.memory._current_up_weight is not None and
+        # Initialize layer memory state if needed
+        # Check if any layer memory has wrong batch size
+        needs_reset = any(
+            layer.self_attn.memory._current_up_weight is None or
             layer.self_attn.memory._batch_size != batch_size
-            for layer in list(self.H_level.layers) + list(self.L_level.layers)
+            for layer in self.L_level.layers
         )
-        needs_reset = top_level_needs_reset or layer_needs_reset
         if needs_reset:
             self.reset_all_memory(batch_size=batch_size, device=device)
 
-        # Get current memory outputs as "state" tensors (HIERARCHICAL ORDER)
-        # L queries with input, H queries with L output (creates proper hierarchy)
-        # OPTIMIZATION: Initial states are overwritten in the loop, so no gradients needed here
-        with torch.no_grad():
-            l_state = self.memory_L(input_embeddings)  # L: input -> L representation
-            h_state = self.memory_H(l_state)           # H: L -> H representation (hierarchical!)
+        # Initial states from input embeddings (like original TRM)
+        # Layer memories provide implicit state via MAG/MAC/MAL integration
+        l_state = input_embeddings
+        h_state = input_embeddings
 
         # H_cycles-1 without grad (INTENTIONAL for efficiency)
         # This matches original TRM design where only final cycle has gradients.
-        # Memory weights are still updated but without backprop tracking.
+        # Layer memory weights are still updated but without backprop tracking.
         # The final H_cycle with gradients provides sufficient learning signal.
         with torch.no_grad():
             for _H_step in range(self.config.H_cycles - 1):
                 # L_cycles: update L state based on H state + input
                 for _L_step in range(self.config.L_cycles):
-                    # Match Original TRM: injection = z_H + input (NOT l_state + z_H + input)
+                    # Match Original TRM: injection = z_H + input
                     l_injection = h_state + input_embeddings
                     l_state, surprise = self.L_level(
                         l_state, l_injection,
@@ -1350,26 +1311,20 @@ class TRM_Titans_Inner(nn.Module):
                         create_graph=False,
                         **seq_info
                     )
-                    # Update memory_L based on new state
-                    if update_memory:
-                        self.memory_L.update(input_embeddings, l_state, create_graph=False)
 
-                # Update H state based on L state using H_level (NOT L_level!)
-                # Match Original TRM: injection = z_L only (NOT h_state + z_L)
+                # H update using L_level (like original TRM)
+                # Match Original TRM: injection = z_L only
                 h_injection = l_state
-                h_state, surprise = self.H_level(
+                h_state, surprise = self.L_level(
                     h_state, h_injection,
                     update_memory=update_memory,
                     create_graph=False,
                     **seq_info
                 )
-                # Update memory_H based on new state (key=l_state for hierarchy)
-                if update_memory:
-                    self.memory_H.update(l_state, h_state, create_graph=False)
 
         # Final H_cycle with grad
         for _L_step in range(self.config.L_cycles):
-            # Match Original TRM: injection = z_H + input (NOT l_state + z_H + input)
+            # Match Original TRM: injection = z_H + input
             l_injection = h_state + input_embeddings
             l_state, surprise = self.L_level(
                 l_state, l_injection,
@@ -1379,24 +1334,16 @@ class TRM_Titans_Inner(nn.Module):
             )
             total_surprise = total_surprise + surprise
 
-            if update_memory:
-                mem_surprise = self.memory_L.update(input_embeddings, l_state, create_graph=should_create_graph)
-                total_surprise = total_surprise + mem_surprise
-
-        # Final H update using H_level (NOT L_level!)
-        # Match Original TRM: injection = z_L only (NOT h_state + z_L)
+        # Final H update using L_level (like original TRM)
+        # Match Original TRM: injection = z_L only
         h_injection = l_state
-        h_state, surprise = self.H_level(
+        h_state, surprise = self.L_level(
             h_state, h_injection,
             update_memory=update_memory,
             create_graph=should_create_graph,
             **seq_info
         )
         total_surprise = total_surprise + surprise
-
-        if update_memory:
-            mem_surprise = self.memory_H.update(l_state, h_state, create_graph=should_create_graph)
-            total_surprise = total_surprise + mem_surprise
 
         # Detach states after ALL computations complete (moved from after L_cycles)
         if not self.training:
@@ -1411,23 +1358,11 @@ class TRM_Titans_Inner(nn.Module):
         #
         # Surprise counting in the final H_cycle (with gradients):
         # - L_cycles calls to L_level.forward(): each returns SUM of L_layers surprises
-        # - 1 H_update call to H_level.forward(): returns SUM of H_layers surprises
-        # - If update_memory:
-        #   - L_cycles calls to memory_L.update(): each returns 1 surprise
-        #   - 1 call to memory_H.update(): returns 1 surprise
+        # - 1 H_update call to L_level.forward(): returns SUM of L_layers surprises
         #
-        # Total individual surprise terms:
-        # - L_level layer surprises: L_cycles * L_layers
-        # - H_level layer surprises: 1 * H_layers
-        # - Memory surprises: (L_cycles + 1) if update_memory
+        # Total: (L_cycles + 1) * L_layers layer surprises
         n_L_layers = len(self.L_level.layers)
-        n_H_layers = len(self.H_level.layers)
-        if update_memory:
-            # L_cycles * L_layers + 1 * H_layers + (L_cycles + 1) memory surprises
-            num_surprise_terms = (self.config.L_cycles * n_L_layers) + n_H_layers + (self.config.L_cycles + 1)
-        else:
-            # Only layer surprises
-            num_surprise_terms = (self.config.L_cycles * n_L_layers) + n_H_layers
+        num_surprise_terms = (self.config.L_cycles + 1) * n_L_layers
         total_surprise = total_surprise / max(num_surprise_terms, 1)
 
         # Outputs (use H state for final prediction)
@@ -1448,8 +1383,10 @@ class TRM_Titans(nn.Module):
     """
     TRM with Titans-style Memory - ACT wrapper.
 
-    Key feature: No z_H, z_L tensors.
-    Memory weights ARE the state, stored in TitansMemory modules.
+    Architecture (matches original TRM with Titans memory):
+    - Only L_level exists (H_layers is ignored, like original TRM)
+    - Layer memories inside each block serve as implicit state (replacing z_H, z_L)
+    - H/L cycles structure maintained: L_cycles per H_cycle, H update uses L_level
 
     Titans Memory Design:
     - Memory template weights (template_up, template_down) are frozen during training
@@ -1481,15 +1418,11 @@ class TRM_Titans(nn.Module):
         to adapt during forward pass.
 
         Memory parameters frozen:
-        - inner.memory_H.template_up/down (top-level H memory)
-        - inner.memory_L.template_up/down (top-level L memory)
-        - *.self_attn.memory.template_up/down (attention layer memories)
+        - *.self_attn.memory.template_up/down (layer memories)
         - *.mem_lr, *.mem_decay (memory hyperparameters)
         """
         for name, param in self.named_parameters():
             is_memory = (
-                '.memory_H.' in name or
-                '.memory_L.' in name or
                 '.self_attn.memory.' in name or
                 '.mem_lr' in name or
                 '.mem_decay' in name
@@ -1506,8 +1439,6 @@ class TRM_Titans(nn.Module):
         """
         for name, param in self.named_parameters():
             is_memory = (
-                '.memory_H.' in name or
-                '.memory_L.' in name or
                 '.self_attn.memory.' in name or
                 '.mem_lr' in name or
                 '.mem_decay' in name
@@ -1649,8 +1580,6 @@ class TRM_Titans_ACTLossHead(nn.Module):
         memory_params_unfrozen = []
         for name, param in self.model.named_parameters():
             is_memory = (
-                '.memory_H.' in name or
-                '.memory_L.' in name or
                 '.self_attn.memory.' in name or
                 '.mem_lr' in name or
                 '.mem_decay' in name
@@ -1671,8 +1600,6 @@ class TRM_Titans_ACTLossHead(nn.Module):
                 # Manual freeze if method doesn't exist
                 for name, param in self.model.named_parameters():
                     is_memory = (
-                        '.memory_H.' in name or
-                        '.memory_L.' in name or
                         '.self_attn.memory.' in name or
                         '.mem_lr' in name or
                         '.mem_decay' in name
