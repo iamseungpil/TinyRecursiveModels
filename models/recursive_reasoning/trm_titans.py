@@ -1075,7 +1075,7 @@ class TRM_Titans_Config(BaseModel):
     H_cycles: int
     L_cycles: int
 
-    H_layers: int  # ignored
+    H_layers: int  # Number of layers for H_level (high-level reasoning)
     L_layers: int
 
     # Transformer config
@@ -1213,7 +1213,12 @@ class TRM_Titans_Inner(nn.Module):
             dtype=self.forward_dtype
         )
 
-        # Reasoning Layers (shared between H and L cycles)
+        # H_level for high-level reasoning (used in H_cycles for h_state updates)
+        self.H_level = TRM_Titans_ReasoningModule(
+            layers=[TRM_Titans_Block(self.config) for _ in range(self.config.H_layers)]
+        )
+
+        # L_level for low-level computation (used in L_cycles for l_state updates)
         self.L_level = TRM_Titans_ReasoningModule(
             layers=[TRM_Titans_Block(self.config) for _ in range(self.config.L_layers)]
         )
@@ -1224,15 +1229,17 @@ class TRM_Titans_Inner(nn.Module):
             self.q_head.bias.fill_(-5)
 
     def reset_all_memory(self, batch_size: int, device: torch.device = None):
-        """Reset all memory states (memory_H, memory_L, and layer memories)."""
+        """Reset all memory states (memory_H, memory_L, H_level and L_level memories)."""
         self.memory_H.reset(batch_size=batch_size, device=device)
         self.memory_L.reset(batch_size=batch_size, device=device)
+        self.H_level.reset_memory(batch_size=batch_size, device=device)
         self.L_level.reset_memory(batch_size=batch_size, device=device)
 
     def reset_memory_for_samples(self, reset_mask: torch.Tensor):
         """Selectively reset memory for specific samples."""
         self.memory_H.reset_for_samples(reset_mask)
         self.memory_L.reset_for_samples(reset_mask)
+        self.H_level.reset_memory_for_samples(reset_mask)
         self.L_level.reset_memory_for_samples(reset_mask)
 
     def _input_embeddings(self, input: torch.Tensor, puzzle_identifiers: torch.Tensor):
@@ -1310,11 +1317,11 @@ class TRM_Titans_Inner(nn.Module):
             self.memory_L._batch_size != batch_size or
             self.memory_H._batch_size != self.memory_L._batch_size
         )
-        # Check layer memories for consistency
+        # Check layer memories for consistency (both H_level and L_level)
         layer_needs_reset = any(
             layer.self_attn.memory._current_up_weight is not None and
             layer.self_attn.memory._batch_size != batch_size
-            for layer in self.L_level.layers
+            for layer in list(self.H_level.layers) + list(self.L_level.layers)
         )
         needs_reset = top_level_needs_reset or layer_needs_reset
         if needs_reset:
@@ -1347,10 +1354,10 @@ class TRM_Titans_Inner(nn.Module):
                     if update_memory:
                         self.memory_L.update(input_embeddings, l_state, create_graph=False)
 
-                # Update H state based on L state
+                # Update H state based on L state using H_level (NOT L_level!)
                 # Match Original TRM: injection = z_L only (NOT h_state + z_L)
                 h_injection = l_state
-                h_state, surprise = self.L_level(
+                h_state, surprise = self.H_level(
                     h_state, h_injection,
                     update_memory=update_memory,
                     create_graph=False,
@@ -1376,10 +1383,10 @@ class TRM_Titans_Inner(nn.Module):
                 mem_surprise = self.memory_L.update(input_embeddings, l_state, create_graph=should_create_graph)
                 total_surprise = total_surprise + mem_surprise
 
-        # Final H update
+        # Final H update using H_level (NOT L_level!)
         # Match Original TRM: injection = z_L only (NOT h_state + z_L)
         h_injection = l_state
-        h_state, surprise = self.L_level(
+        h_state, surprise = self.H_level(
             h_state, h_injection,
             update_memory=update_memory,
             create_graph=should_create_graph,
@@ -1403,23 +1410,24 @@ class TRM_Titans_Inner(nn.Module):
         # Normalize surprise by the number of surprise terms accumulated
         #
         # Surprise counting in the final H_cycle (with gradients):
-        # - L_cycles calls to L_level.forward(): each returns SUM of n_layers surprises
-        # - 1 H_update call to L_level.forward(): returns SUM of n_layers surprises
+        # - L_cycles calls to L_level.forward(): each returns SUM of L_layers surprises
+        # - 1 H_update call to H_level.forward(): returns SUM of H_layers surprises
         # - If update_memory:
         #   - L_cycles calls to memory_L.update(): each returns 1 surprise
         #   - 1 call to memory_H.update(): returns 1 surprise
         #
         # Total individual surprise terms:
-        # - Layer surprises: (L_cycles + 1) * n_layers
+        # - L_level layer surprises: L_cycles * L_layers
+        # - H_level layer surprises: 1 * H_layers
         # - Memory surprises: (L_cycles + 1) if update_memory
-        n_layers = len(self.L_level.layers)
-        n_forward_calls = self.config.L_cycles + 1
+        n_L_layers = len(self.L_level.layers)
+        n_H_layers = len(self.H_level.layers)
         if update_memory:
-            # (L_cycles + 1) * n_layers layer surprises + (L_cycles + 1) memory surprises
-            num_surprise_terms = n_forward_calls * (n_layers + 1)
+            # L_cycles * L_layers + 1 * H_layers + (L_cycles + 1) memory surprises
+            num_surprise_terms = (self.config.L_cycles * n_L_layers) + n_H_layers + (self.config.L_cycles + 1)
         else:
             # Only layer surprises
-            num_surprise_terms = n_forward_calls * n_layers
+            num_surprise_terms = (self.config.L_cycles * n_L_layers) + n_H_layers
         total_surprise = total_surprise / max(num_surprise_terms, 1)
 
         # Outputs (use H state for final prediction)
