@@ -22,10 +22,11 @@ evaluators:
 global_batch_size: 192
 
 # 12-hour training schedule:
-# - 128 epochs total ≈ 20,480 steps ≈ 12 hours @ 2.12s/step
-# - eval every 32 epochs ≈ 5,120 steps ≈ 3 hours
+# - 128 epochs total ≈ 8,200 steps ≈ 5 hours @ 2.12s/step
+# - eval only at end (128 epochs) to avoid NCCL timeout
+# - Test set has 385K samples = ~2000 batches = ~30min eval time
 epochs: 128
-eval_interval: 32
+eval_interval: 128
 checkpoint_every_eval: True
 
 lr: 1e-4
@@ -52,4 +53,4 @@ checkpoint_path: /data/TinyRecursiveModels/checkpoints/trm_titans_fast
 
 # W&B settings
 project_name: TRM_Titans_Training
-run_name: trm_titans_fast_v12_12h
+run_name: trm_titans_fast_v13_eval_end
