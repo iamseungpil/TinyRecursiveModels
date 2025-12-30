@@ -306,10 +306,12 @@ class MALIntegration(IntegrationStrategy):
             # Attention(x) -> Memory(Attention(x))
             # mem_output is computed from attn_output, so it's the final output
             final_output = mem_output
-            # Surprise: memory predicting its own output (self-consistency)
+            # Surprise: difference between memory's refinement and attention output
             surprise_per_sample = (mem_output - attn_output.to(mem_output.dtype)).pow(2).mean(dim=(1, 2))
-            # Memory update: K=attn_output, V=mem_output
-            update_k, update_v = attn_output, mem_output
+            # Memory update: Learn full input -> final output mapping
+            # Memory learns to predict the complete transformation from raw input
+            # to final output, giving it a consistent learning signal
+            update_k, update_v = hidden_states, mem_output
 
         surprise = surprise_per_sample.mean()
 
@@ -913,23 +915,24 @@ class TitansAttention(nn.Module):
         """
         batch_size, seq_len, _ = hidden_states.shape
 
-        # Memory retrieval (always computed first)
-        mem_output = self.memory(hidden_states)
-
-        # Compute attention based on integration type
-        if self.integration_type == "mac":
-            # MAC: Use memory output as context for attention
-            attn_output = self._attention_with_context(hidden_states, mem_output, cos_sin)
-        elif self.integration_type == "mal" and isinstance(self.integration, MALIntegration):
+        # Compute memory and attention based on integration type
+        # (Conditional computation to avoid wasted work)
+        if self.integration_type == "mal" and isinstance(self.integration, MALIntegration):
             if self.integration.order == "memory_first":
-                # MAL memory_first: Attention takes memory output as input
+                # MAL memory_first: Memory(x) -> Attention(Memory(x))
+                mem_output = self.memory(hidden_states)
                 attn_output = self._standard_attention(mem_output, cos_sin)
             else:
-                # MAL attention_first: Attention on original, then memory
+                # MAL attention_first: Attention(x) -> Memory(Attention(x))
                 attn_output = self._standard_attention(hidden_states, cos_sin)
-                mem_output = self.memory(attn_output)  # Recompute memory on attention output
+                mem_output = self.memory(attn_output)
+        elif self.integration_type == "mac":
+            # MAC: Use memory output as context for attention
+            mem_output = self.memory(hidden_states)
+            attn_output = self._attention_with_context(hidden_states, mem_output, cos_sin)
         else:
-            # MAG (default): Standard attention
+            # MAG (default): Standard parallel computation
+            mem_output = self.memory(hidden_states)
             attn_output = self._standard_attention(hidden_states, cos_sin)
 
         # Apply integration strategy
@@ -1819,6 +1822,20 @@ class TRM_Titans_TestTime:
         """
         return [p for p in self.model.parameters() if p.requires_grad]
 
+    def reset_memory(self, batch_size: int = 1):
+        """
+        Explicitly reset memory to clean template state.
+
+        Call this method to:
+        - Reset memory before adapting to a new puzzle (automatic in test_time_adapt)
+        - Reset memory between independent predictions
+        - Clear memory if you want a fresh start
+
+        Args:
+            batch_size: Batch size for the memory state
+        """
+        self.model.reset_all_memory(batch_size=batch_size, device=self.device)
+
     def test_time_adapt(
         self,
         demo_pairs: List[Tuple[torch.Tensor, torch.Tensor]],
@@ -1873,7 +1890,7 @@ class TRM_Titans_TestTime:
         if not demo_pairs:
             raise ValueError("demo_pairs cannot be empty for test-time adaptation")
 
-        # Validate batch size consistency BEFORE training (only warn once)
+        # Validate batch size consistency FIRST (before any state modification)
         first_batch_size = demo_pairs[0][0].shape[0]
         for demo_idx, (demo_x, demo_y) in enumerate(demo_pairs):
             if demo_x.shape[0] != first_batch_size:
@@ -1882,6 +1899,10 @@ class TRM_Titans_TestTime:
                     f"Expected {first_batch_size}, got {demo_x.shape[0]} at demo {demo_idx}. "
                     f"Memory state is tied to batch size and cannot handle mismatches."
                 )
+
+        # Reset memory to clean state before adaptation (after validation passes)
+        # This ensures no interference from previous puzzle adaptations
+        self.model.reset_all_memory(batch_size=first_batch_size, device=self.device)
 
         # Get learnable params (only puzzle_emb following Titans design)
         learnable_params = self.get_learnable_params()
@@ -1950,7 +1971,10 @@ class TRM_Titans_TestTime:
 
         # We have learnable params (puzzle_emb) - use optimizer
         optimizer = torch.optim.Adam(learnable_params, lr=lr)
-        self.model.train()
+        # NOTE: Keep model in eval mode to prevent ACT halting logic from interfering
+        # with our explicit memory control via halted flag. Memory updates still work
+        # via update_memory parameter (not dependent on training mode).
+        self.model.eval()
 
         num_demos = len(demo_pairs)
 
@@ -2043,7 +2067,8 @@ class TRM_Titans_TestTime:
         self,
         test_input: torch.Tensor,
         update_during_prediction: bool = False,
-        puzzle_id: int = 0
+        puzzle_id: int = 0,
+        reset_memory: bool = False
     ) -> torch.Tensor:
         """Make prediction after adaptation.
 
@@ -2052,6 +2077,8 @@ class TRM_Titans_TestTime:
             update_during_prediction: Whether to continue updating memory during prediction.
                                       True allows online refinement, False gives deterministic output.
             puzzle_id: Puzzle identifier (should match the one used in test_time_adapt)
+            reset_memory: If True, reset memory before prediction for independent predictions.
+                         If False (default), use adapted memory state from test_time_adapt.
 
         Returns:
             predictions: Predicted token IDs (argmax of logits) [B, L]
@@ -2060,6 +2087,10 @@ class TRM_Titans_TestTime:
 
         with torch.no_grad():
             test_input = test_input.to(self.device)
+
+            # Optionally reset memory for independent predictions
+            if reset_memory:
+                self.model.reset_all_memory(batch_size=test_input.shape[0], device=self.device)
 
             batch = {
                 "inputs": test_input,
