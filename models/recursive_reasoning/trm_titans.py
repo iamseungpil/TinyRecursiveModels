@@ -62,6 +62,7 @@ Usage:
 from typing import Tuple, List, Dict, Optional
 from dataclasses import dataclass
 from contextlib import nullcontext
+from abc import ABC, abstractmethod
 import math
 import warnings
 import torch
@@ -106,6 +107,216 @@ from models.sparse_embedding import CastedSparseEmbedding
 from torch.nn.functional import scaled_dot_product_attention
 
 IGNORE_LABEL_ID = -100
+
+
+# =============================================================================
+# Integration Strategy ABC and Implementations (Plug-and-Play)
+# =============================================================================
+
+class IntegrationStrategy(ABC):
+    """
+    Abstract base class for Memory-Attention integration strategies.
+
+    This enables plug-and-play integration of different memory-attention
+    combination methods without modifying core attention logic.
+
+    Supported strategies:
+    - MAG (Memory as Gate): confidence-based mixing
+    - MAC (Memory as Context): memory as attention KV context
+    - MAL (Memory as Layer): sequential processing
+    """
+
+    @abstractmethod
+    def combine(
+        self,
+        memory: 'TitansMemory',
+        hidden_states: torch.Tensor,
+        mem_output: torch.Tensor,
+        attn_output: torch.Tensor,
+        update_memory: bool,
+        create_graph: bool
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Combine memory and attention outputs.
+
+        Args:
+            memory: TitansMemory module for updates
+            hidden_states: Input to memory [B, L, D]
+            mem_output: Memory forward output [B, L, D]
+            attn_output: Attention output [B, L, D]
+            update_memory: Whether to update memory
+            create_graph: Whether to create computation graph
+
+        Returns:
+            output: Combined output [B, L, D]
+            surprise: Memory surprise value
+        """
+        pass
+
+
+class MAGIntegration(IntegrationStrategy):
+    """
+    Memory as Gate (MAG): output = confidence * mem + (1-confidence) * attn
+
+    Confidence is computed from surprise: conf = exp(-surprise * temperature)
+    High confidence (low surprise) -> use memory
+    Low confidence (high surprise) -> use attention
+
+    This is the default Titans integration strategy.
+    """
+
+    def __init__(self, temperature_param: nn.Parameter):
+        """
+        Initialize MAG integration.
+
+        Args:
+            temperature_param: Learnable temperature parameter for gating
+        """
+        self.temperature_param = temperature_param
+
+    def combine(
+        self,
+        memory: 'TitansMemory',
+        hidden_states: torch.Tensor,
+        mem_output: torch.Tensor,
+        attn_output: torch.Tensor,
+        update_memory: bool,
+        create_graph: bool
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Combine using surprise-based confidence gating."""
+        # Compute surprise for gating (using current memory state that produced mem_output)
+        # This measures how different the memory prediction is from attention output
+        surprise_per_sample = (mem_output - attn_output.to(mem_output.dtype)).pow(2).mean(dim=(1, 2))
+        surprise = surprise_per_sample.mean()
+
+        # Update memory if requested (surprise for logging is returned from update)
+        if update_memory:
+            surprise = memory.update(hidden_states, attn_output, create_graph=create_graph)
+        # Note: We intentionally use pre-update surprise_per_sample for gating
+        # because it reflects the memory state that produced mem_output.
+        # Recomputing after update would be semantically incorrect (stale mem_output).
+
+        # MAG: Surprise-based confidence gating
+        temperature = F.softplus(self.temperature_param) + 0.1
+        surprise_clamped = surprise_per_sample.clamp(max=50.0 / (temperature + 1e-6))
+        confidence = torch.exp(-surprise_clamped * temperature)  # [B]
+        confidence = confidence.view(-1, 1, 1)  # [B, 1, 1]
+
+        # Combine: high confidence -> use memory, low confidence -> use attention
+        output = confidence * mem_output + (1 - confidence) * attn_output
+
+        return output, surprise
+
+
+class MACIntegration(IntegrationStrategy):
+    """
+    Memory as Context (MAC): output = Attention(Q=x, K=[x,M(x)], V=[x,M(x)])
+
+    Memory output is concatenated to Key and Value, allowing attention
+    to selectively incorporate memory information via attention weights.
+
+    In MAC mode, the attention computation is modified to use memory as context,
+    so the attn_output passed to combine() is already computed with memory context.
+    """
+
+    def __init__(self):
+        """Initialize MAC integration (no additional parameters needed)."""
+        pass
+
+    def combine(
+        self,
+        memory: 'TitansMemory',
+        hidden_states: torch.Tensor,
+        mem_output: torch.Tensor,
+        attn_output: torch.Tensor,  # Already computed with context in MAC
+        update_memory: bool,
+        create_graph: bool
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Combine using memory as context.
+
+        In MAC, attn_output is already computed with memory as context.
+        We just need to update memory and compute surprise.
+        """
+        # Compute surprise: difference between pure memory output and attention-with-context output
+        # This measures how much attention modifies/refines the memory representation.
+        # High surprise = attention significantly changed memory's prediction
+        # Low surprise = memory output was already close to the final result
+        surprise_per_sample = (mem_output - attn_output.to(mem_output.dtype)).pow(2).mean(dim=(1, 2))
+        surprise = surprise_per_sample.mean()
+
+        # Update memory if requested (K=hidden_states, V=attn_output)
+        if update_memory:
+            surprise = memory.update(hidden_states, attn_output, create_graph=create_graph)
+
+        # MAC: attention output is the final output (memory was used as context)
+        return attn_output, surprise
+
+
+class MALIntegration(IntegrationStrategy):
+    """
+    Memory as Layer (MAL): Sequential processing
+
+    Two modes:
+    - memory_first: output = Attention(Memory(x))
+    - attention_first: output = Memory(Attention(x))
+
+    This creates a sequential pipeline where one module processes
+    the output of the other.
+    """
+
+    def __init__(self, order: str = "memory_first"):
+        """
+        Initialize MAL integration.
+
+        Args:
+            order: Processing order - "memory_first" or "attention_first"
+        """
+        assert order in ("memory_first", "attention_first"), \
+            f"order must be 'memory_first' or 'attention_first', got {order}"
+        self.order = order
+
+    def combine(
+        self,
+        memory: 'TitansMemory',
+        hidden_states: torch.Tensor,
+        mem_output: torch.Tensor,  # Already computed based on order
+        attn_output: torch.Tensor,  # Already computed based on order
+        update_memory: bool,
+        create_graph: bool
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Combine using sequential processing.
+
+        The mem_output and attn_output are pre-computed based on order:
+        - memory_first: mem_output = M(x), attn_output = A(M(x))
+        - attention_first: attn_output = A(x), mem_output = M(A(x))
+        """
+        # Determine which is the final output based on order
+        if self.order == "memory_first":
+            # Memory(x) -> Attention(Memory(x))
+            # attn_output is computed from mem_output, so it's the final output
+            final_output = attn_output
+            # Surprise: how well memory predicts what attention wants
+            surprise_per_sample = (mem_output - attn_output.to(mem_output.dtype)).pow(2).mean(dim=(1, 2))
+            # Memory update: K=hidden_states, V=what attention produces
+            update_k, update_v = hidden_states, attn_output
+        else:  # attention_first
+            # Attention(x) -> Memory(Attention(x))
+            # mem_output is computed from attn_output, so it's the final output
+            final_output = mem_output
+            # Surprise: memory predicting its own output (self-consistency)
+            surprise_per_sample = (mem_output - attn_output.to(mem_output.dtype)).pow(2).mean(dim=(1, 2))
+            # Memory update: K=attn_output, V=mem_output
+            update_k, update_v = attn_output, mem_output
+
+        surprise = surprise_per_sample.mean()
+
+        # Update memory if requested
+        if update_memory:
+            surprise = memory.update(update_k, update_v, create_graph=create_graph)
+
+        return final_output, surprise
 
 
 # =============================================================================
@@ -443,14 +654,17 @@ def apply_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, si
     return q_embed.to(orig_dtype), k_embed.to(orig_dtype)
 
 
-class TitansAttentionWithMAG(nn.Module):
+class TitansAttention(nn.Module):
     """
-    Attention with Memory-as-Gate (MAG) integration.
+    Attention with pluggable Memory integration strategy.
 
-    MAG combines memory output with attention output:
-        output = gate * memory_out + (1 - gate) * attn_out
+    Supports three integration strategies:
+    - MAG (Memory as Gate): confidence-based mixing (default)
+    - MAC (Memory as Context): memory as attention KV context
+    - MAL (Memory as Layer): sequential processing
 
-    The gate is computed from memory confidence (inverse of surprise).
+    The integration strategy can be configured at initialization time,
+    allowing different experiments without code changes.
     """
 
     def __init__(
@@ -460,8 +674,23 @@ class TitansAttentionWithMAG(nn.Module):
         num_heads: int,
         num_key_value_heads: int,
         memory_hidden_mult: int = 4,
-        dtype: torch.dtype = torch.bfloat16
+        dtype: torch.dtype = torch.bfloat16,
+        integration_type: str = "mag",
+        mal_order: str = "memory_first"
     ):
+        """
+        Initialize TitansAttention with pluggable integration strategy.
+
+        Args:
+            hidden_size: Model hidden dimension
+            head_dim: Attention head dimension
+            num_heads: Number of attention heads
+            num_key_value_heads: Number of key/value heads (for GQA)
+            memory_hidden_mult: Memory hidden dimension multiplier
+            dtype: Data type for memory computations
+            integration_type: Integration strategy - "mag", "mac", or "mal"
+            mal_order: For MAL - "memory_first" or "attention_first"
+        """
         super().__init__()
 
         self.hidden_size = hidden_size
@@ -486,8 +715,38 @@ class TitansAttentionWithMAG(nn.Module):
             dtype=dtype
         )
 
-        # Temperature for surprise-based gating
+        # Temperature for surprise-based gating (used by MAG)
         self.surprise_temperature = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
+
+        # Integration strategy (pluggable)
+        self.integration_type = integration_type
+        self.integration = self._create_integration(integration_type, mal_order)
+
+    def _create_integration(self, integration_type: str, mal_order: str) -> IntegrationStrategy:
+        """
+        Create integration strategy based on type.
+
+        Args:
+            integration_type: Strategy type - "mag", "mac", or "mal"
+            mal_order: For MAL - "memory_first" or "attention_first"
+
+        Returns:
+            IntegrationStrategy instance
+
+        Raises:
+            ValueError: If integration_type is not recognized
+        """
+        if integration_type == "mag":
+            return MAGIntegration(self.surprise_temperature)
+        elif integration_type == "mac":
+            return MACIntegration()
+        elif integration_type == "mal":
+            return MALIntegration(order=mal_order)
+        else:
+            raise ValueError(
+                f"Unknown integration type: {integration_type}. "
+                "Must be 'mag', 'mac', or 'mal'."
+            )
 
     def reset_memory(self, batch_size: int, device: torch.device = None):
         """Reset memory state."""
@@ -497,19 +756,20 @@ class TitansAttentionWithMAG(nn.Module):
         """Selectively reset memory for specific samples."""
         self.memory.reset_for_samples(reset_mask)
 
-    def forward(
+    def _standard_attention(
         self,
-        cos_sin: CosSin,
         hidden_states: torch.Tensor,
-        update_memory: bool = True,
-        create_graph: bool = False
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cos_sin: CosSin
+    ) -> torch.Tensor:
         """
-        Forward pass with attention and MAG integration.
+        Standard self-attention computation.
+
+        Args:
+            hidden_states: Input tensor [B, L, D]
+            cos_sin: Rotary position embeddings (cos, sin) or None
 
         Returns:
-            output: Combined output [B, L, D]
-            surprise: Memory prediction error
+            attn_output: Attention output [B, L, D]
         """
         batch_size, seq_len, _ = hidden_states.shape
 
@@ -521,9 +781,19 @@ class TitansAttentionWithMAG(nn.Module):
         key = qkv[:, :, self.num_heads: self.num_heads + self.num_key_value_heads]
         value = qkv[:, :, self.num_heads + self.num_key_value_heads:]
 
-        # Apply RoPE
+        # Apply RoPE (handle potential length mismatch)
         if cos_sin is not None:
             cos, sin = cos_sin
+            # RoPE tensors may be 2D [max_len, head_dim] or 3D [batch, max_len, head_dim]
+            # Slice to match input sequence length
+            if cos.ndim == 2:
+                # [max_len, head_dim] - slice on dim 0
+                cos = cos[:seq_len]
+                sin = sin[:seq_len]
+            else:
+                # [batch, max_len, head_dim] - slice on dim 1
+                cos = cos[:, :seq_len]
+                sin = sin[:, :seq_len]
             query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
         # Attention
@@ -537,27 +807,145 @@ class TitansAttentionWithMAG(nn.Module):
         attn_output = einops.rearrange(attn_output, 'B H S D -> B S (H D)')
         attn_output = self.o_proj(attn_output)
 
-        # Memory retrieval
+        return attn_output
+
+    def _attention_with_context(
+        self,
+        hidden_states: torch.Tensor,
+        context: torch.Tensor,
+        cos_sin: CosSin
+    ) -> torch.Tensor:
+        """
+        Compute attention with memory context (for MAC).
+
+        Q: from hidden_states (with RoPE)
+        K: [hidden_states (with RoPE), context (NO RoPE)]
+        V: [hidden_states, context]
+
+        Memory context is TIMELESS and does NOT receive RoPE.
+        This allows attention to selectively incorporate memory information
+        without imposing positional semantics on memory.
+
+        Args:
+            hidden_states: Input tensor [B, L, D]
+            context: Memory context tensor [B, ctx_len, D]
+            cos_sin: Rotary position embeddings (cos, sin) or None
+
+        Returns:
+            attn_output: Attention output [B, L, D]
+        """
+        batch_size, seq_len, _ = hidden_states.shape
+        ctx_len = context.shape[1]
+
+        # Project Q from hidden_states
+        qkv_q = self.qkv_proj(hidden_states)
+        qkv_q = qkv_q.view(batch_size, seq_len, self.num_heads + 2 * self.num_key_value_heads, self.head_dim)
+        query = qkv_q[:, :, :self.num_heads]
+
+        # Project K, V separately from hidden_states and context
+        # Hidden states K/V (will get RoPE on K)
+        qkv_hidden = self.qkv_proj(hidden_states)
+        qkv_hidden = qkv_hidden.view(batch_size, seq_len, self.num_heads + 2 * self.num_key_value_heads, self.head_dim)
+        key_hidden = qkv_hidden[:, :, self.num_heads: self.num_heads + self.num_key_value_heads]
+        value_hidden = qkv_hidden[:, :, self.num_heads + self.num_key_value_heads:]
+
+        # Context K/V (NO RoPE - memory is timeless)
+        qkv_ctx = self.qkv_proj(context)
+        qkv_ctx = qkv_ctx.view(batch_size, ctx_len, self.num_heads + 2 * self.num_key_value_heads, self.head_dim)
+        key_ctx = qkv_ctx[:, :, self.num_heads: self.num_heads + self.num_key_value_heads]
+        value_ctx = qkv_ctx[:, :, self.num_heads + self.num_key_value_heads:]
+
+        # Apply RoPE to query and hidden_states key ONLY (NOT to context)
+        if cos_sin is not None:
+            cos, sin = cos_sin
+            # Handle both 2D [L, D] and 3D [B, L, D] RoPE tensors
+            if cos.ndim == 2:
+                cos_seq = cos[:seq_len]
+                sin_seq = sin[:seq_len]
+            else:  # 3D: [B, L, D]
+                cos_seq = cos[:, :seq_len]
+                sin_seq = sin[:, :seq_len]
+            query, key_hidden = apply_rotary_pos_emb(query, key_hidden, cos_seq, sin_seq)
+
+        # Concatenate K/V: [hidden (with RoPE), context (no RoPE)]
+        key = torch.cat([key_hidden, key_ctx], dim=1)
+        value = torch.cat([value_hidden, value_ctx], dim=1)
+
+        # Attention
+        query_attn = einops.rearrange(query, 'B S H D -> B H S D')
+        key_attn = einops.rearrange(key, 'B S H D -> B H S D')
+        value_attn = einops.rearrange(value, 'B S H D -> B H S D')
+
+        attn_output = scaled_dot_product_attention(
+            query=query_attn, key=key_attn, value=value_attn, is_causal=False
+        )
+        attn_output = einops.rearrange(attn_output, 'B H S D -> B S (H D)')
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output
+
+    def forward(
+        self,
+        cos_sin: CosSin,
+        hidden_states: torch.Tensor,
+        update_memory: bool = True,
+        create_graph: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Forward pass with attention and memory integration.
+
+        The integration strategy determines how memory and attention outputs
+        are combined:
+        - MAG: Confidence-based gating
+        - MAC: Memory as attention context
+        - MAL: Sequential processing
+
+        Args:
+            cos_sin: Rotary position embeddings (cos, sin) or None
+            hidden_states: Input tensor [B, L, D]
+            update_memory: Whether to update memory state
+            create_graph: Whether to create computation graph for backprop
+
+        Returns:
+            output: Combined output [B, L, D]
+            surprise: Memory prediction error
+        """
+        batch_size, seq_len, _ = hidden_states.shape
+
+        # Memory retrieval (always computed first)
         mem_output = self.memory(hidden_states)
 
-        # Compute surprise for gating
-        surprise_per_sample = (mem_output - attn_output.to(mem_output.dtype)).pow(2).mean(dim=(1, 2))
-        surprise = surprise_per_sample.mean()
+        # Compute attention based on integration type
+        if self.integration_type == "mac":
+            # MAC: Use memory output as context for attention
+            attn_output = self._attention_with_context(hidden_states, mem_output, cos_sin)
+        elif self.integration_type == "mal" and isinstance(self.integration, MALIntegration):
+            if self.integration.order == "memory_first":
+                # MAL memory_first: Attention takes memory output as input
+                attn_output = self._standard_attention(mem_output, cos_sin)
+            else:
+                # MAL attention_first: Attention on original, then memory
+                attn_output = self._standard_attention(hidden_states, cos_sin)
+                mem_output = self.memory(attn_output)  # Recompute memory on attention output
+        else:
+            # MAG (default): Standard attention
+            attn_output = self._standard_attention(hidden_states, cos_sin)
 
-        # Update memory if requested
-        if update_memory:
-            surprise = self.memory.update(hidden_states, attn_output, create_graph=create_graph)
-
-        # MAG: Surprise-based confidence gating
-        temperature = F.softplus(self.surprise_temperature) + 0.1
-        surprise_clamped = surprise_per_sample.clamp(max=50.0 / (temperature + 1e-6))
-        confidence = torch.exp(-surprise_clamped * temperature)  # [B]
-        confidence = confidence.view(-1, 1, 1)  # [B, 1, 1]
-
-        # Combine: high confidence -> use memory, low confidence -> use attention
-        output = confidence * mem_output + (1 - confidence) * attn_output
+        # Apply integration strategy
+        output, surprise = self.integration.combine(
+            memory=self.memory,
+            hidden_states=hidden_states,
+            mem_output=mem_output,
+            attn_output=attn_output,
+            update_memory=update_memory,
+            create_graph=create_graph
+        )
 
         return output, surprise
+
+
+# Backward compatibility alias
+TitansAttentionWithMAG = TitansAttention
 
 
 # =============================================================================
@@ -566,21 +954,25 @@ class TitansAttentionWithMAG(nn.Module):
 
 class TRM_Titans_Block(nn.Module):
     """
-    Single TRM-Titans block with attention+MAG and MLP.
+    Single TRM-Titans block with pluggable memory integration and MLP.
+
+    The integration strategy (MAG, MAC, or MAL) is determined by the config.
     """
 
     def __init__(self, config) -> None:
         super().__init__()
         self.config = config
 
-        # Attention with MAG
-        self.self_attn = TitansAttentionWithMAG(
+        # Attention with pluggable integration strategy
+        self.self_attn = TitansAttention(
             hidden_size=config.hidden_size,
             head_dim=config.hidden_size // config.num_heads,
             num_heads=config.num_heads,
             num_key_value_heads=config.num_heads,
             memory_hidden_mult=config.memory_hidden_mult,
-            dtype=getattr(torch, config.forward_dtype)
+            dtype=getattr(torch, config.forward_dtype),
+            integration_type=getattr(config, 'integration_type', 'mag'),
+            mal_order=getattr(config, 'mal_order', 'memory_first')
         )
 
         # MLP
@@ -708,6 +1100,12 @@ class TRM_Titans_Config(BaseModel):
     # Titans Memory specific
     memory_hidden_mult: int = 4
     surprise_loss_weight: float = 0.1
+
+    # Integration type for memory-attention combination
+    # Options: "mag" (Memory as Gate), "mac" (Memory as Context), "mal" (Memory as Layer)
+    integration_type: str = "mag"
+    # For MAL integration: "memory_first" or "attention_first"
+    mal_order: str = "memory_first"
 
 
 # =============================================================================
