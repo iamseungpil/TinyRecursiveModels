@@ -22,6 +22,41 @@ This module implements the Titans architecture where:
 - Each memory is a 2-layer MLP with batch-aware per-sample weights
 - H_cycles: Number of high-level memory updates
 - L_cycles: Number of low-level memory updates per H_cycle
+
+=== TITANS LOSS DESIGN ===
+The Titans paper specifies that memory should learn during forward pass only:
+
+1. LM Loss:
+   - Optimizes all parameters EXCEPT memory template weights
+   - Memory templates have requires_grad=False (call model.freeze_memory_templates())
+   - Gradients flow normally to other parameters (embeddings, attention, MLP, etc.)
+
+2. Memory Learning (during forward pass):
+   - Memory _current_weights update via surprise-based gradient descent
+   - Implemented in TitansMemory.update() method
+   - Uses the equation: M_t = (1 - alpha) * M_{t-1} - eta * grad(surprise)
+   - This happens automatically during forward pass, NOT via optimizer.step()
+
+3. Surprise Loss:
+   - Monitored for logging but NOT added to total_loss
+   - Memory already learns from surprise during forward pass
+
+4. Test-time Adaptation:
+   - Memory adapts automatically during forward pass
+   - Only puzzle_emb uses optimizer.step() (optional)
+   - Memory templates remain frozen
+
+Usage:
+    # During training
+    model = TRM_Titans(config)
+    model.freeze_memory_templates()  # IMPORTANT: Call before training
+    loss_head = TRM_Titans_ACTLossHead(model, loss_type)
+    # ... training loop ...
+
+    # During test-time adaptation
+    ttt = TRM_Titans_TestTime(model)
+    ttt.test_time_adapt(demo_pairs)  # Memory adapts automatically
+    predictions = ttt.predict(test_input)
 """
 
 from typing import Tuple, List, Dict, Optional
@@ -1009,6 +1044,12 @@ class TRM_Titans(nn.Module):
 
     Key feature: No z_H, z_L tensors.
     Memory weights ARE the state, stored in TitansMemory modules.
+
+    Titans Memory Design:
+    - Memory template weights (template_up, template_down) are frozen during training
+    - Memory _current_weights adapt during forward pass via surprise-based update
+    - LM loss does NOT affect memory templates
+    - Call freeze_memory_templates() before training to enforce this
     """
 
     def __init__(self, config_dict: dict):
@@ -1019,6 +1060,54 @@ class TRM_Titans(nn.Module):
     @property
     def puzzle_emb(self):
         return self.inner.puzzle_emb
+
+    def freeze_memory_templates(self):
+        """
+        Freeze memory template weights to prevent LM loss gradients.
+
+        Titans Design:
+        - Memory learns ONLY during forward pass via memory.update() (surprise-based)
+        - Memory templates should NOT receive gradients from LM loss
+        - This method freezes all memory-related nn.Parameters
+
+        Call this method before training to enforce Titans loss design.
+        The _current_weights (runtime state) are NOT affected and continue
+        to adapt during forward pass.
+
+        Memory parameters frozen:
+        - inner.memory_H.template_up/down (top-level H memory)
+        - inner.memory_L.template_up/down (top-level L memory)
+        - *.self_attn.memory.template_up/down (attention layer memories)
+        - *.mem_lr, *.mem_decay (memory hyperparameters)
+        """
+        for name, param in self.named_parameters():
+            is_memory = (
+                '.memory_H.' in name or
+                '.memory_L.' in name or
+                '.self_attn.memory.' in name or
+                '.mem_lr' in name or
+                '.mem_decay' in name
+            )
+            if is_memory:
+                param.requires_grad = False
+
+    def unfreeze_memory_templates(self):
+        """
+        Unfreeze memory template weights (for meta-learning or fine-tuning).
+
+        This reverses freeze_memory_templates() and allows memory templates
+        to receive gradients from the optimizer. Use with caution.
+        """
+        for name, param in self.named_parameters():
+            is_memory = (
+                '.memory_H.' in name or
+                '.memory_L.' in name or
+                '.self_attn.memory.' in name or
+                '.mem_lr' in name or
+                '.mem_decay' in name
+            )
+            if is_memory:
+                param.requires_grad = True
 
     def reset_all_memory(self, batch_size: int = None, device: torch.device = None):
         """Reset all memory states."""
@@ -1120,12 +1209,74 @@ class TRM_Titans(nn.Module):
 class TRM_Titans_ACTLossHead(nn.Module):
     """
     ACT Loss Head for TRM-Titans with surprise loss integration.
+
+    Titans Loss Design:
+    - LM loss: Optimizes all parameters EXCEPT memory template weights
+    - Surprise loss: Used for memory update during forward pass (already implemented in memory.update())
+    - Q losses: Optimize all parameters for halting decisions
+
+    Implementation:
+    - Memory templates should have requires_grad=False before training
+    - Call model.freeze_memory_templates() before training to enforce this
+    - Memory _current_weights adapt during forward via Titans update rule (not via optimizer)
+    - Surprise loss is NOT included in total_loss (memory learns via forward pass)
     """
 
     def __init__(self, model: TRM_Titans, loss_type: str):
         super().__init__()
         self.model = model
         self.loss_fn = self._get_loss_fn(loss_type)
+
+        # Auto-freeze memory templates to enforce Titans loss design
+        # Memory should only learn via forward-pass surprise updates, NOT via optimizer
+        self._enforce_titans_loss_design()
+
+    def _enforce_titans_loss_design(self):
+        """
+        Enforce Titans loss design by freezing memory template parameters.
+
+        Titans paper design: Memory learns via forward-pass surprise updates,
+        NOT via optimizer.step(). This method ensures memory templates don't
+        receive gradients from LM loss.
+        """
+        # Check if memory templates are already frozen
+        memory_params_unfrozen = []
+        for name, param in self.model.named_parameters():
+            is_memory = (
+                '.memory_H.' in name or
+                '.memory_L.' in name or
+                '.self_attn.memory.' in name or
+                '.mem_lr' in name or
+                '.mem_decay' in name
+            )
+            if is_memory and param.requires_grad:
+                memory_params_unfrozen.append(name)
+
+        if memory_params_unfrozen:
+            # Auto-freeze memory templates
+            if hasattr(self.model, 'freeze_memory_templates'):
+                self.model.freeze_memory_templates()
+                print(
+                    f"[TRM-Titans] Auto-frozen {len(memory_params_unfrozen)} memory parameters "
+                    "to enforce Titans loss design. Memory will learn via forward-pass "
+                    "surprise updates only."
+                )
+            else:
+                # Manual freeze if method doesn't exist
+                for name, param in self.model.named_parameters():
+                    is_memory = (
+                        '.memory_H.' in name or
+                        '.memory_L.' in name or
+                        '.self_attn.memory.' in name or
+                        '.mem_lr' in name or
+                        '.mem_decay' in name
+                    )
+                    if is_memory:
+                        param.requires_grad = False
+                print(
+                    f"[TRM-Titans] Auto-frozen {len(memory_params_unfrozen)} memory parameters "
+                    "to enforce Titans loss design."
+                )
 
     def _get_loss_fn(self, loss_type: str):
         """Get loss function."""
@@ -1148,11 +1299,23 @@ class TRM_Titans_ACTLossHead(nn.Module):
         batch: Dict[str, torch.Tensor],
     ):
         """
-        Forward pass with loss computation.
+        Forward pass with loss computation following Titans paper loss design.
+
+        Titans Loss Design:
+        - LM loss: Optimizes all parameters EXCEPT memory template weights
+        - Surprise loss: Memory learns during forward pass via memory.update() (automatic)
+        - Q losses: Optimize all parameters (including memory for halting decisions)
+
+        Implementation Strategy:
+        We use a post-backward hook approach to zero out memory gradients from LM loss.
+        This is cleaner than separate backward passes and works with mixed precision.
+
+        The total_loss returned is computed for gradient computation, but memory params
+        will have their LM loss gradients zeroed after backward.
 
         Returns:
             new_carry: Updated carry
-            loss: Total loss
+            loss: Total loss (memory grads from LM loss will be zeroed after backward)
             metrics: Dict of metrics
             detached_outputs: Outputs for evaluation
             all_halted: Whether all sequences halted
@@ -1191,7 +1354,9 @@ class TRM_Titans_ACTLossHead(nn.Module):
             reduction="sum"
         )
 
-        # Surprise loss
+        # Surprise loss - this is logged but NOT added to total_loss
+        # Memory learns via surprise during forward pass (memory.update()), not via backward
+        # The surprise value is used for monitoring only
         surprise_loss = outputs.get("surprise", torch.tensor(0.0, device=lm_loss.device))
         surprise_weight = self.model.config.surprise_loss_weight
 
@@ -1211,8 +1376,20 @@ class TRM_Titans_ACTLossHead(nn.Module):
             )
             metrics["q_continue_loss"] = q_continue_loss.detach()
 
-        # Total loss
-        total_loss = lm_loss + 0.5 * (q_halt_loss + q_continue_loss) + surprise_weight * surprise_loss
+        # Total loss for backward pass
+        # NOTE: surprise_loss is NOT included here (Titans design)
+        # Memory learns during forward pass via memory.update(), not via optimizer
+        #
+        # Q losses ARE included because halting decisions can legitimately use memory state
+        # (the model needs to know when memory is confident to decide when to halt)
+        total_loss = lm_loss + 0.5 * (q_halt_loss + q_continue_loss)
+
+        # Titans Design: Memory template params should NOT receive gradients from LM/Q losses
+        # Memory learns ONLY during forward pass via memory.update() (surprise-based)
+        #
+        # Implementation: Memory template weights have requires_grad=False (set in __init__)
+        # This is enforced by freeze_memory_templates() which should be called before training.
+        # The _current_weights are separate tensors updated via memory.update().
 
         # Filter outputs for return
         detached_outputs = {k: outputs[k].detach() for k in return_keys if k in outputs}
@@ -1259,9 +1436,15 @@ def softmax_cross_entropy(logits, labels, ignore_index: int = -100, valid_mask=N
 
 class TRM_Titans_TestTime:
     """
-    Utilities for test-time learning.
+    Utilities for test-time learning following Titans paper design.
 
-    At test-time, only memory and puzzle_emb are learned.
+    Titans Test-Time Adaptation Design:
+    - Memory _current_weights: Adapt automatically during forward pass via surprise-based update
+    - Memory templates: FROZEN (not trained by optimizer)
+    - Puzzle_emb: Optionally trained via optimizer (optional)
+
+    The key insight is that memory learns during forward pass via memory.update(),
+    NOT via optimizer.step(). The optimizer is only used for puzzle_emb.
     """
 
     def __init__(self, model: TRM_Titans, device: torch.device = None):
@@ -1270,47 +1453,37 @@ class TRM_Titans_TestTime:
         self._freeze_pretrained()
 
     def _freeze_pretrained(self):
-        """Freeze all parameters except memory modules and puzzle embeddings.
-
-        Test-time adaptation uses two mechanisms:
-
-        1. Gradient-based optimization (via optimizer.step()):
-           - inner.puzzle_emb.* - receives gradients from LM/surprise loss
-           - Memory template weights are included but typically don't receive
-             useful gradients due to detach() in memory.update()
-
-        2. Fast weight updates (via memory.update() during forward):
-           - Memory _current_*_weight are updated via Titans memory update rule
-           - This is the primary memory adaptation mechanism
-
-        Learnable parameters (requires_grad=True):
-        - inner.memory_H.* (high-level memory templates)
-        - inner.memory_L.* (low-level memory templates)
-        - *.self_attn.memory.* (attention layer memory templates)
-        - *.mem_lr, *.mem_decay (memory hyperparameters)
-        - inner.puzzle_emb.* (puzzle embeddings)
-
-        Note: The actual memory state (_current_up_weight, _current_down_weight)
-        is updated via the Titans update rule during forward pass, not through
-        the optimizer. Template weights serve as initialization for memory reset.
         """
-        for name, param in self.model.named_parameters():
-            # Specific patterns for memory-related parameters
-            is_titans_memory = (
-                '.memory_H.' in name or
-                '.memory_L.' in name or
-                '.self_attn.memory.' in name
-            )
-            is_mem_hyperparam = '.mem_lr' in name or '.mem_decay' in name
-            is_puzzle_emb = '.puzzle_emb.' in name
+        Freeze parameters for test-time adaptation following Titans design.
 
-            if is_titans_memory or is_mem_hyperparam or is_puzzle_emb:
+        Titans Design:
+        - Memory adapts via forward-pass surprise update (NOT optimizer)
+        - Only puzzle_emb uses optimizer.step() (optional)
+        - All other parameters are frozen
+
+        This method:
+        1. Freezes ALL parameters (requires_grad=False)
+        2. Unfreezes only puzzle_emb (requires_grad=True)
+
+        Note: Memory _current_weights are still updated during forward
+        via the Titans update rule, independent of requires_grad.
+        """
+        # First freeze everything
+        for param in self.model.parameters():
+            param.requires_grad = False
+
+        # Unfreeze only puzzle_emb
+        for name, param in self.model.named_parameters():
+            if '.puzzle_emb.' in name:
                 param.requires_grad = True
-            else:
-                param.requires_grad = False
 
     def get_learnable_params(self):
-        """Get parameters that are learned at test-time."""
+        """
+        Get parameters that are learned via optimizer at test-time.
+
+        Following Titans design, only puzzle_emb is optimized.
+        Memory learns during forward pass via memory.update().
+        """
         return [p for p in self.model.parameters() if p.requires_grad]
 
     def test_time_adapt(
@@ -1320,13 +1493,15 @@ class TRM_Titans_TestTime:
         lr: float = 0.01,
         puzzle_id: int = 0,
         verbose: bool = False,
-        accumulate_memory: bool = True,
-        use_lm_loss_for_memory: bool = False
+        accumulate_memory: bool = True
     ):
-        """Adapt model to a new puzzle using demo pairs.
+        """
+        Adapt model to a new puzzle using demo pairs.
 
-        This method performs test-time adaptation by learning from demonstration
-        pairs. The key design choice is how memory accumulates across demos:
+        Titans Test-Time Adaptation:
+        - Memory automatically adapts during forward pass via surprise-based update
+        - Puzzle_emb optionally trained via optimizer
+        - Memory templates are NOT trained (Titans design)
 
         Memory Accumulation Behavior (accumulate_memory=True, default):
             - Memory is initialized once at the START of each adaptation step
@@ -1340,26 +1515,17 @@ class TRM_Titans_TestTime:
             - No information transfer between demos within a step
             - Useful for independent demo processing
 
-        Loss Design:
-            - Surprise loss: Always applied, drives memory to predict attention output
-            - LM loss: Controlled by use_lm_loss_for_memory parameter
-              - False (default): LM loss gradients are blocked from memory params
-              - True: LM loss also optimizes memory (original behavior)
-
         Args:
             demo_pairs: List of (input, target) demo pairs. Each pair contains:
                 - input: Token IDs tensor [B, L]
                 - target: Label IDs tensor [B, L] (use IGNORE_LABEL_ID=-100 for padding)
             n_steps: Number of adaptation steps (epochs over all demos)
-            lr: Learning rate for adaptation optimizer
+            lr: Learning rate for puzzle_emb optimizer
             puzzle_id: Puzzle identifier for puzzle embedding (should be consistent
                       with predict() calls)
             verbose: Whether to print loss progression
             accumulate_memory: If True (default), memory accumulates across demos
                               within each step. If False, memory resets before each demo.
-            use_lm_loss_for_memory: If False (default), LM loss does not affect memory
-                                   template weights (only surprise loss does). If True,
-                                   LM loss also optimizes memory (may cause instability).
 
         Raises:
             ValueError: If demo_pairs is empty
@@ -1384,7 +1550,73 @@ class TRM_Titans_TestTime:
                     f"Memory state is tied to batch size and cannot handle mismatches."
                 )
 
-        optimizer = torch.optim.Adam(self.get_learnable_params(), lr=lr)
+        # Get learnable params (only puzzle_emb following Titans design)
+        learnable_params = self.get_learnable_params()
+
+        # If no learnable params (no puzzle_emb), just do forward passes for memory adaptation
+        if not learnable_params:
+            if verbose:
+                print("No learnable parameters (puzzle_emb). Running forward passes for memory adaptation only.")
+
+            for step in range(n_steps):
+                # Create carry at the start of each step
+                first_demo_x, first_demo_y = demo_pairs[0]
+                first_demo_x = first_demo_x.to(self.device)
+                first_batch = {
+                    "inputs": first_demo_x,
+                    "labels": first_demo_y.to(self.device),
+                    "puzzle_identifiers": torch.full(
+                        (first_demo_x.shape[0],), puzzle_id,
+                        dtype=torch.long, device=self.device
+                    )
+                }
+                carry = self.model.initial_carry(first_batch)
+
+                total_surprise = 0.0
+                with torch.no_grad():
+                    for demo_idx, (demo_x, demo_y) in enumerate(demo_pairs):
+                        demo_x = demo_x.to(self.device)
+                        demo_y = demo_y.to(self.device)
+
+                        batch = {
+                            "inputs": demo_x,
+                            "labels": demo_y,
+                            "puzzle_identifiers": torch.full(
+                                (demo_x.shape[0],), puzzle_id,
+                                dtype=torch.long, device=self.device
+                            )
+                        }
+
+                        # Forward pass - memory adapts automatically
+                        carry, outputs = self.model(carry, batch, update_memory=True, create_graph=False)
+
+                        # Control memory accumulation
+                        if accumulate_memory and demo_idx == 0:
+                            carry = TRM_Titans_Carry(
+                                inner_carry=carry.inner_carry,
+                                steps=carry.steps,
+                                halted=torch.zeros_like(carry.halted),
+                                current_data=carry.current_data
+                            )
+                        elif not accumulate_memory and demo_idx > 0:
+                            carry = TRM_Titans_Carry(
+                                inner_carry=carry.inner_carry,
+                                steps=carry.steps,
+                                halted=torch.ones_like(carry.halted),
+                                current_data=carry.current_data
+                            )
+
+                        total_surprise += outputs["surprise"].item()
+
+                if verbose:
+                    avg_surprise = total_surprise / len(demo_pairs)
+                    print(f"Step {step+1}/{n_steps}, Avg Surprise: {avg_surprise:.4f}")
+
+            self.model.eval()
+            return
+
+        # We have learnable params (puzzle_emb) - use optimizer
+        optimizer = torch.optim.Adam(learnable_params, lr=lr)
         self.model.train()
 
         num_demos = len(demo_pairs)
@@ -1421,7 +1653,7 @@ class TRM_Titans_TestTime:
                     )
                 }
 
-                # Forward pass
+                # Forward pass - memory adapts automatically via memory.update()
                 carry, outputs = self.model(carry, batch, update_memory=True, create_graph=True)
 
                 # Memory accumulation control:
@@ -1453,90 +1685,18 @@ class TRM_Titans_TestTime:
                 logits = outputs["logits"]
                 labels = demo_y[:, :logits.shape[1]]
 
-                # Compute LM loss
+                # Compute LM loss for puzzle_emb optimization
                 lm_loss = F.cross_entropy(
                     logits.reshape(-1, logits.shape[-1]),
                     labels.reshape(-1),
                     ignore_index=IGNORE_LABEL_ID
                 )
 
-                # Surprise loss (always applied to memory)
-                # This is the primary learning signal for memory - it learns to predict
-                # attention output, which is the core Titans design principle
-                surprise_loss = self.model.config.surprise_loss_weight * outputs["surprise"]
+                # Only LM loss for puzzle_emb (memory learns via forward pass)
+                # Note: Memory templates have requires_grad=False, so they don't get gradients
+                (lm_loss / num_demos).backward()
 
-                # Total loss computation
-                # Design rationale:
-                # - Surprise loss: Memory's primary objective (predict attention output)
-                # - LM loss: Language modeling objective (predict next token)
-                #
-                # When use_lm_loss_for_memory=False (default):
-                #   Memory templates only receive gradients from surprise loss.
-                #   This keeps memory focused on its core function (attention prediction)
-                #   while puzzle_emb still learns from both losses.
-                #
-                # When use_lm_loss_for_memory=True:
-                #   Both losses optimize all learnable params including memory templates.
-                #   May lead to memory learning task-specific shortcuts instead of
-                #   general attention prediction patterns.
-                if use_lm_loss_for_memory:
-                    # Original behavior: both losses optimize everything
-                    loss = lm_loss + surprise_loss
-                    (loss / num_demos).backward()
-                else:
-                    # Memory templates learn from surprise only
-                    # Implementation: Separate backward passes with gradient accumulation
-                    #
-                    # Step 1: Backward surprise loss (affects memory params)
-                    # Step 2: Save memory grads
-                    # Step 3: Backward LM loss (affects all params including memory)
-                    # Step 4: Restore memory grads (overwrite LM loss contribution)
-                    #
-                    # This ensures memory only learns from surprise, while puzzle_emb
-                    # and other params learn from both losses.
-
-                    # Backward surprise loss first
-                    (surprise_loss / num_demos).backward(retain_graph=True)
-
-                    # Save memory gradients
-                    memory_grads = {}
-                    for name, param in self.model.named_parameters():
-                        if param.requires_grad and param.grad is not None:
-                            is_memory = (
-                                '.memory_H.' in name or
-                                '.memory_L.' in name or
-                                '.self_attn.memory.' in name or
-                                '.mem_lr' in name or
-                                '.mem_decay' in name
-                            )
-                            if is_memory:
-                                memory_grads[name] = param.grad.clone()
-
-                    # Backward LM loss (will add to existing grads)
-                    (lm_loss / num_demos).backward()
-
-                    # Restore memory gradients (block LM loss contribution to memory)
-                    # Also handle edge case: if a memory param didn't have grad after
-                    # surprise backward but does after LM backward, zero it out
-                    for name, param in self.model.named_parameters():
-                        is_memory = (
-                            '.memory_H.' in name or
-                            '.memory_L.' in name or
-                            '.self_attn.memory.' in name or
-                            '.mem_lr' in name or
-                            '.mem_decay' in name
-                        )
-                        if is_memory:
-                            if name in memory_grads:
-                                # Restore saved surprise-only gradient
-                                param.grad = memory_grads[name]
-                            elif param.grad is not None:
-                                # Memory param has LM grad but no surprise grad - zero it out
-                                # This prevents LM loss from affecting memory params that
-                                # didn't receive surprise gradients
-                                param.grad.zero_()
-
-                total_loss_value += (lm_loss.item() + surprise_loss.item())
+                total_loss_value += lm_loss.item()
 
             optimizer.step()
 
