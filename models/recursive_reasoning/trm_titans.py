@@ -1272,12 +1272,27 @@ class TRM_Titans_TestTime:
     def _freeze_pretrained(self):
         """Freeze all parameters except memory modules and puzzle embeddings.
 
-        Learnable at test-time:
-        - inner.memory_H.* (high-level memory)
-        - inner.memory_L.* (low-level memory)
-        - *.self_attn.memory.* (attention layer memories)
+        Test-time adaptation uses two mechanisms:
+
+        1. Gradient-based optimization (via optimizer.step()):
+           - inner.puzzle_emb.* - receives gradients from LM/surprise loss
+           - Memory template weights are included but typically don't receive
+             useful gradients due to detach() in memory.update()
+
+        2. Fast weight updates (via memory.update() during forward):
+           - Memory _current_*_weight are updated via Titans memory update rule
+           - This is the primary memory adaptation mechanism
+
+        Learnable parameters (requires_grad=True):
+        - inner.memory_H.* (high-level memory templates)
+        - inner.memory_L.* (low-level memory templates)
+        - *.self_attn.memory.* (attention layer memory templates)
         - *.mem_lr, *.mem_decay (memory hyperparameters)
         - inner.puzzle_emb.* (puzzle embeddings)
+
+        Note: The actual memory state (_current_up_weight, _current_down_weight)
+        is updated via the Titans update rule during forward pass, not through
+        the optimizer. Template weights serve as initialization for memory reset.
         """
         for name, param in self.model.named_parameters():
             # Specific patterns for memory-related parameters
@@ -1304,27 +1319,71 @@ class TRM_Titans_TestTime:
         n_steps: int = 5,
         lr: float = 0.01,
         puzzle_id: int = 0,
-        verbose: bool = False
+        verbose: bool = False,
+        accumulate_memory: bool = True,
+        use_lm_loss_for_memory: bool = False
     ):
         """Adapt model to a new puzzle using demo pairs.
 
+        This method performs test-time adaptation by learning from demonstration
+        pairs. The key design choice is how memory accumulates across demos:
+
+        Memory Accumulation Behavior (accumulate_memory=True, default):
+            - Memory is initialized once at the START of each adaptation step
+            - All demos within a step share and build upon the same memory state
+            - Information from earlier demos is retained and refined by later demos
+            - This enables few-shot learning where demos progressively teach the model
+
+        Non-accumulating Behavior (accumulate_memory=False):
+            - Memory is reset to template weights before EACH demo
+            - Each demo is processed independently with fresh memory
+            - No information transfer between demos within a step
+            - Useful for independent demo processing
+
+        Loss Design:
+            - Surprise loss: Always applied, drives memory to predict attention output
+            - LM loss: Controlled by use_lm_loss_for_memory parameter
+              - False (default): LM loss gradients are blocked from memory params
+              - True: LM loss also optimizes memory (original behavior)
+
         Args:
-            demo_pairs: List of (input, target) demo pairs
-            n_steps: Number of adaptation steps
-            lr: Learning rate for adaptation
-            puzzle_id: Puzzle identifier for puzzle embedding (default: 0)
-            verbose: Whether to print loss progression (default: False)
+            demo_pairs: List of (input, target) demo pairs. Each pair contains:
+                - input: Token IDs tensor [B, L]
+                - target: Label IDs tensor [B, L] (use IGNORE_LABEL_ID=-100 for padding)
+            n_steps: Number of adaptation steps (epochs over all demos)
+            lr: Learning rate for adaptation optimizer
+            puzzle_id: Puzzle identifier for puzzle embedding (should be consistent
+                      with predict() calls)
+            verbose: Whether to print loss progression
+            accumulate_memory: If True (default), memory accumulates across demos
+                              within each step. If False, memory resets before each demo.
+            use_lm_loss_for_memory: If False (default), LM loss does not affect memory
+                                   template weights (only surprise loss does). If True,
+                                   LM loss also optimizes memory (may cause instability).
 
         Raises:
             ValueError: If demo_pairs is empty
+
+        Example:
+            >>> ttt = TRM_Titans_TestTime(model)
+            >>> demos = [(x1, y1), (x2, y2), (x3, y3)]  # 3 demo pairs
+            >>> ttt.test_time_adapt(demos, n_steps=10, lr=0.01)
+            >>> predictions = ttt.predict(test_input)
         """
         # Validate input
         if not demo_pairs:
             raise ValueError("demo_pairs cannot be empty for test-time adaptation")
 
-        # Memory will be reset with correct batch size on first forward pass.
-        # Flow: initial_carry creates halted=True -> forward calls reset_memory_for_samples(halted)
-        # -> TitansMemory.reset_for_samples initializes weights with correct batch_size
+        # Validate batch size consistency BEFORE training (only warn once)
+        first_batch_size = demo_pairs[0][0].shape[0]
+        for demo_idx, (demo_x, demo_y) in enumerate(demo_pairs):
+            if demo_x.shape[0] != first_batch_size:
+                raise ValueError(
+                    f"All demos must have the same batch size. "
+                    f"Expected {first_batch_size}, got {demo_x.shape[0]} at demo {demo_idx}. "
+                    f"Memory state is tied to batch size and cannot handle mismatches."
+                )
+
         optimizer = torch.optim.Adam(self.get_learnable_params(), lr=lr)
         self.model.train()
 
@@ -1334,33 +1393,150 @@ class TRM_Titans_TestTime:
             optimizer.zero_grad()
             total_loss_value = 0.0
 
-            # Use gradient accumulation pattern for memory efficiency
-            for demo_x, demo_y in demo_pairs:
+            # Create carry ONCE at the start of each step (before demo loop)
+            # This ensures memory accumulates across all demos within the step
+            first_demo_x, first_demo_y = demo_pairs[0]
+            first_demo_x = first_demo_x.to(self.device)
+            first_batch = {
+                "inputs": first_demo_x,
+                "labels": first_demo_y.to(self.device),
+                "puzzle_identifiers": torch.full(
+                    (first_demo_x.shape[0],), puzzle_id,
+                    dtype=torch.long, device=self.device
+                )
+            }
+            carry = self.model.initial_carry(first_batch)
+
+            # Process all demos in this step
+            for demo_idx, (demo_x, demo_y) in enumerate(demo_pairs):
                 demo_x = demo_x.to(self.device)
                 demo_y = demo_y.to(self.device)
 
                 batch = {
                     "inputs": demo_x,
                     "labels": demo_y,
-                    "puzzle_identifiers": torch.full((demo_x.shape[0],), puzzle_id, dtype=torch.long, device=self.device)
+                    "puzzle_identifiers": torch.full(
+                        (demo_x.shape[0],), puzzle_id,
+                        dtype=torch.long, device=self.device
+                    )
                 }
 
-                carry = self.model.initial_carry(batch)
+                # Forward pass
                 carry, outputs = self.model(carry, batch, update_memory=True, create_graph=True)
+
+                # Memory accumulation control:
+                # - accumulate_memory=True: Memory persists across all demos in this step
+                # - accumulate_memory=False: Memory resets before each demo
+                #
+                # The halted flag controls memory reset in model.forward():
+                # - halted=True -> memory gets reset
+                # - halted=False -> memory persists
+                if accumulate_memory and demo_idx == 0:
+                    # Prevent memory reset for all subsequent demos in this step
+                    carry = TRM_Titans_Carry(
+                        inner_carry=carry.inner_carry,
+                        steps=carry.steps,
+                        halted=torch.zeros_like(carry.halted),  # halted=False prevents reset
+                        current_data=carry.current_data
+                    )
+                elif not accumulate_memory and demo_idx > 0:
+                    # Force memory reset for each demo when not accumulating
+                    # After first forward, carry.halted becomes False automatically,
+                    # so we must explicitly set it to True to trigger reset
+                    carry = TRM_Titans_Carry(
+                        inner_carry=carry.inner_carry,
+                        steps=carry.steps,
+                        halted=torch.ones_like(carry.halted),  # halted=True forces reset
+                        current_data=carry.current_data
+                    )
 
                 logits = outputs["logits"]
                 labels = demo_y[:, :logits.shape[1]]
 
-                loss = F.cross_entropy(
-                    logits.view(-1, logits.shape[-1]),
-                    labels.view(-1),
+                # Compute LM loss
+                lm_loss = F.cross_entropy(
+                    logits.reshape(-1, logits.shape[-1]),
+                    labels.reshape(-1),
                     ignore_index=IGNORE_LABEL_ID
                 )
-                loss = loss + self.model.config.surprise_loss_weight * outputs["surprise"]
 
-                # Normalize by number of demos and backprop immediately (gradient accumulation)
-                (loss / num_demos).backward()
-                total_loss_value += loss.item()
+                # Surprise loss (always applied to memory)
+                # This is the primary learning signal for memory - it learns to predict
+                # attention output, which is the core Titans design principle
+                surprise_loss = self.model.config.surprise_loss_weight * outputs["surprise"]
+
+                # Total loss computation
+                # Design rationale:
+                # - Surprise loss: Memory's primary objective (predict attention output)
+                # - LM loss: Language modeling objective (predict next token)
+                #
+                # When use_lm_loss_for_memory=False (default):
+                #   Memory templates only receive gradients from surprise loss.
+                #   This keeps memory focused on its core function (attention prediction)
+                #   while puzzle_emb still learns from both losses.
+                #
+                # When use_lm_loss_for_memory=True:
+                #   Both losses optimize all learnable params including memory templates.
+                #   May lead to memory learning task-specific shortcuts instead of
+                #   general attention prediction patterns.
+                if use_lm_loss_for_memory:
+                    # Original behavior: both losses optimize everything
+                    loss = lm_loss + surprise_loss
+                    (loss / num_demos).backward()
+                else:
+                    # Memory templates learn from surprise only
+                    # Implementation: Separate backward passes with gradient accumulation
+                    #
+                    # Step 1: Backward surprise loss (affects memory params)
+                    # Step 2: Save memory grads
+                    # Step 3: Backward LM loss (affects all params including memory)
+                    # Step 4: Restore memory grads (overwrite LM loss contribution)
+                    #
+                    # This ensures memory only learns from surprise, while puzzle_emb
+                    # and other params learn from both losses.
+
+                    # Backward surprise loss first
+                    (surprise_loss / num_demos).backward(retain_graph=True)
+
+                    # Save memory gradients
+                    memory_grads = {}
+                    for name, param in self.model.named_parameters():
+                        if param.requires_grad and param.grad is not None:
+                            is_memory = (
+                                '.memory_H.' in name or
+                                '.memory_L.' in name or
+                                '.self_attn.memory.' in name or
+                                '.mem_lr' in name or
+                                '.mem_decay' in name
+                            )
+                            if is_memory:
+                                memory_grads[name] = param.grad.clone()
+
+                    # Backward LM loss (will add to existing grads)
+                    (lm_loss / num_demos).backward()
+
+                    # Restore memory gradients (block LM loss contribution to memory)
+                    # Also handle edge case: if a memory param didn't have grad after
+                    # surprise backward but does after LM backward, zero it out
+                    for name, param in self.model.named_parameters():
+                        is_memory = (
+                            '.memory_H.' in name or
+                            '.memory_L.' in name or
+                            '.self_attn.memory.' in name or
+                            '.mem_lr' in name or
+                            '.mem_decay' in name
+                        )
+                        if is_memory:
+                            if name in memory_grads:
+                                # Restore saved surprise-only gradient
+                                param.grad = memory_grads[name]
+                            elif param.grad is not None:
+                                # Memory param has LM grad but no surprise grad - zero it out
+                                # This prevents LM loss from affecting memory params that
+                                # didn't receive surprise gradients
+                                param.grad.zero_()
+
+                total_loss_value += (lm_loss.item() + surprise_loss.item())
 
             optimizer.step()
 
