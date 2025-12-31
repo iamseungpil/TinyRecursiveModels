@@ -428,6 +428,11 @@ class TitansMemory(nn.Module):
             self.reset(batch_size=reset_mask.shape[0], device=device)
             return
 
+        # Handle batch size changes (e.g., last batch in epoch or after error recovery)
+        if self._batch_size != reset_mask.shape[0]:
+            self.reset(batch_size=reset_mask.shape[0], device=device)
+            return
+
         # Get template weights expanded to batch
         template_up = self.template_up.weight.unsqueeze(0).expand_as(self._current_up_weight)
         template_down = self.template_down.weight.unsqueeze(0).expand_as(self._current_down_weight)
@@ -1302,6 +1307,10 @@ class TRM_Titans_Inner(nn.Module):
         seq_len = batch["inputs"].shape[1]
         device = batch["inputs"].device
 
+        # Validate batch size (empty batches will cause memory update failures)
+        if batch_size == 0:
+            raise ValueError("TRM_Titans: Cannot process empty batch (batch_size=0)")
+
         seq_info = dict(
             cos_sin=self.rotary_emb() if hasattr(self, "rotary_emb") else None,
         )
@@ -1312,27 +1321,27 @@ class TRM_Titans_Inner(nn.Module):
         total_surprise = torch.tensor(0.0, device=device, dtype=torch.float32)
         should_create_graph = create_graph and self.training
 
-        # Initialize layer memory state if needed
-        # Check if any layer memory has wrong batch size
-        needs_reset = any(
+        # Initialize memory state if needed (check BOTH memory_H and L_level together)
+        # This ensures synchronized state between global memory_H and layer-level memories
+        # Memory persistence: memories persist across forward passes for test-time adaptation
+        # Reset only happens when: 1) not initialized, or 2) batch size changes
+        memory_h_needs_reset = (
+            self.memory_H._current_up_weight is None or
+            self.memory_H._batch_size != batch_size
+        )
+        l_level_needs_reset = any(
             layer.self_attn.memory._current_up_weight is None or
             layer.self_attn.memory._batch_size != batch_size
             for layer in self.L_level.layers
         )
-        if needs_reset:
+
+        # Reset ALL memories together to maintain synchronized state
+        if memory_h_needs_reset or l_level_needs_reset:
             self.reset_all_memory(batch_size=batch_size, device=device)
 
         # Initialize l_state from L_init + input_embeddings
         # L_init provides a learnable starting point for the L-level state
         l_state = self.L_init.view(1, 1, -1) + input_embeddings
-
-        # Initialize memory_H state only if not initialized or batch size changed
-        # Memory_H should PERSIST across forward passes to accumulate knowledge
-        # This is critical for test-time adaptation where multiple forward passes
-        # need to build upon previous memory states
-        if (self.memory_H._current_up_weight is None or
-            self.memory_H._batch_size != batch_size):
-            self.memory_H.reset(batch_size=batch_size, device=device)
 
         # H_cycles-1 without grad (INTENTIONAL for efficiency)
         # This matches original TRM design where only final cycle has gradients.
@@ -1440,6 +1449,9 @@ class TRM_Titans(nn.Module):
 
     @property
     def puzzle_emb(self):
+        """Access puzzle embedding (returns None if puzzle_emb_ndim=0)."""
+        if not hasattr(self.inner, 'puzzle_emb'):
+            return None
         return self.inner.puzzle_emb
 
     @property
