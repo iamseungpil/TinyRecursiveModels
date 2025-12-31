@@ -1207,17 +1207,39 @@ class TRM_Titans_Inner(nn.Module):
             layers=[TRM_Titans_Block(self.config) for _ in range(self.config.L_layers)]
         )
 
+        # Global H-level memory (replaces z_H, provides h_state)
+        self.memory_H = TitansMemory(
+            input_dim=self.config.hidden_size,
+            hidden_dim=self.config.hidden_size * self.config.memory_hidden_mult,
+            output_dim=self.config.hidden_size,
+            dtype=self.forward_dtype
+        )
+
+        # Learnable initial states (can be loaded from TRM checkpoint)
+        self.H_init = nn.Parameter(torch.zeros(self.config.hidden_size))
+        self.L_init = nn.Parameter(torch.zeros(self.config.hidden_size))
+
+        # Initialize with small random values
+        nn.init.normal_(self.H_init, std=0.02)
+        nn.init.normal_(self.L_init, std=0.02)
+
         # Q head initialization
         with torch.no_grad():
             self.q_head.weight.zero_()
             self.q_head.bias.fill_(-5)
 
+    def reset_memory_H(self, batch_size: int, device: torch.device = None):
+        """Reset global H-level memory."""
+        self.memory_H.reset(batch_size=batch_size, device=device)
+
     def reset_all_memory(self, batch_size: int, device: torch.device = None):
-        """Reset all layer memory states in L_level."""
+        """Reset all memory states including global memory_H."""
+        self.memory_H.reset(batch_size=batch_size, device=device)
         self.L_level.reset_memory(batch_size=batch_size, device=device)
 
     def reset_memory_for_samples(self, reset_mask: torch.Tensor):
         """Selectively reset memory for specific samples."""
+        self.memory_H.reset_for_samples(reset_mask)
         self.L_level.reset_memory_for_samples(reset_mask)
 
     def _input_embeddings(self, input: torch.Tensor, puzzle_identifiers: torch.Tensor):
@@ -1257,20 +1279,27 @@ class TRM_Titans_Inner(nn.Module):
         create_graph: bool = False
     ) -> Tuple[TRM_Titans_InnerCarry, torch.Tensor, Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """
-        Forward pass using Titans-style memory iteration.
+        Forward pass using TRM-Titans v2 architecture.
 
-        Architecture (matches original TRM with Titans memory):
-        - Layer memories inside L_level blocks serve as implicit state
-        - Only L_level exists (like original TRM, H_layers is ignored)
-        - H/L cycles structure: L_cycles per H_cycle, H update also uses L_level
+        Architecture:
+            l_state (explicit tensor) -> L_level(l_state, h_state + input) -> l_state' -> lm_head -> output
+                                              ^
+                                         h_state = memory_H(l_state)
+
+        Key design:
+        - l_state is the main computational state that produces output
+        - h_state from memory_H is only used as injection context
+        - memory_H learns the l_state evolution pattern (key=l_state_before, value=l_state_after)
+        - Layer-level memories in L_level remain unchanged
 
         Returns:
             new_carry: Updated carry (minimal)
             output: LM logits
             (q_halt_logits, q_continue_logits): Halting logits
-            total_surprise: Sum of layer memory surprises
+            total_surprise: Sum of memory surprises (layer memories + memory_H)
         """
         batch_size = batch["inputs"].shape[0]
+        seq_len = batch["inputs"].shape[1]
         device = batch["inputs"].device
 
         seq_info = dict(
@@ -1293,20 +1322,31 @@ class TRM_Titans_Inner(nn.Module):
         if needs_reset:
             self.reset_all_memory(batch_size=batch_size, device=device)
 
-        # Initial states from input embeddings (like original TRM)
-        # Layer memories provide implicit state via MAG/MAC/MAL integration
-        l_state = input_embeddings
-        h_state = input_embeddings
+        # Initialize l_state from L_init + input_embeddings
+        # L_init provides a learnable starting point for the L-level state
+        l_state = self.L_init.view(1, 1, -1) + input_embeddings
+
+        # Initialize memory_H state only if not initialized or batch size changed
+        # Memory_H should PERSIST across forward passes to accumulate knowledge
+        # This is critical for test-time adaptation where multiple forward passes
+        # need to build upon previous memory states
+        if (self.memory_H._current_up_weight is None or
+            self.memory_H._batch_size != batch_size):
+            self.memory_H.reset(batch_size=batch_size, device=device)
 
         # H_cycles-1 without grad (INTENTIONAL for efficiency)
         # This matches original TRM design where only final cycle has gradients.
-        # Layer memory weights are still updated but without backprop tracking.
+        # Memory weights are still updated but without backprop tracking.
         # The final H_cycle with gradients provides sufficient learning signal.
         with torch.no_grad():
             for _H_step in range(self.config.H_cycles - 1):
-                # L_cycles: update L state based on H state + input
+                # Get h_state from memory_H (memory retrieval)
+                h_state = self.memory_H(l_state)
+
+                l_state_before = l_state.clone()
                 for _L_step in range(self.config.L_cycles):
-                    # Match Original TRM: injection = z_H + input
+                    # l_injection = h_state + input_embeddings
+                    # h_state provides context from memory, input_embeddings provides task info
                     l_injection = h_state + input_embeddings
                     l_state, surprise = self.L_level(
                         l_state, l_injection,
@@ -1315,19 +1355,17 @@ class TRM_Titans_Inner(nn.Module):
                         **seq_info
                     )
 
-                # H update using L_level (like original TRM)
-                # Match Original TRM: injection = z_L only
-                h_injection = l_state
-                h_state, surprise = self.L_level(
-                    h_state, h_injection,
-                    update_memory=update_memory,
-                    create_graph=False,
-                    **seq_info
-                )
+                # Update memory_H: learn l_state evolution pattern
+                # Key: l_state_before, Value: l_state_after
+                if update_memory:
+                    self.memory_H.update(l_state_before, l_state, create_graph=False)
 
         # Final H_cycle with grad
+        # Get h_state from memory_H
+        h_state = self.memory_H(l_state)
+
+        l_state_before = l_state.clone()
         for _L_step in range(self.config.L_cycles):
-            # Match Original TRM: injection = z_H + input
             l_injection = h_state + input_embeddings
             l_state, surprise = self.L_level(
                 l_state, l_injection,
@@ -1337,21 +1375,16 @@ class TRM_Titans_Inner(nn.Module):
             )
             total_surprise = total_surprise + surprise
 
-        # Final H update using L_level (like original TRM)
-        # Match Original TRM: injection = z_L only
-        h_injection = l_state
-        h_state, surprise = self.L_level(
-            h_state, h_injection,
-            update_memory=update_memory,
-            create_graph=should_create_graph,
-            **seq_info
-        )
-        total_surprise = total_surprise + surprise
+        # Update memory_H with gradient
+        if update_memory:
+            mem_surprise = self.memory_H.update(l_state_before, l_state, create_graph=should_create_graph)
+            total_surprise = total_surprise + mem_surprise
 
-        # Detach states after ALL computations complete (moved from after L_cycles)
-        if not self.training:
-            l_state = l_state.detach()
-            h_state = h_state.detach()
+        # NOTE: DO NOT detach l_state before output computation!
+        # During test-time adaptation, model is in eval() mode but needs gradients
+        # for puzzle_emb updates. The l_state must maintain gradients for:
+        # 1. LM loss backprop (training)
+        # 2. puzzle_emb updates during test-time adaptation (eval mode)
 
         # Synchronize all GPUs after memory updates before final output computation
         # This prevents NCCL timeout from GPU desync during distributed training
@@ -1359,21 +1392,23 @@ class TRM_Titans_Inner(nn.Module):
 
         # Normalize surprise by the number of surprise terms accumulated
         #
-        # Surprise counting in the final H_cycle (with gradients):
-        # - L_cycles calls to L_level.forward(): each returns SUM of L_layers surprises
-        # - 1 H_update call to L_level.forward(): returns SUM of L_layers surprises
-        #
-        # Total: (L_cycles + 1) * L_layers layer surprises
+        # Surprise counting for the FINAL H_cycle only (previous cycles run without grad):
+        # - L_cycles calls to L_level: each returns SUM of L_layers surprises
+        # - 1 memory_H update surprise
+        # Total: L_cycles * L_layers + 1 (all from final H_cycle)
         n_L_layers = len(self.L_level.layers)
-        num_surprise_terms = (self.config.L_cycles + 1) * n_L_layers
+        num_surprise_terms = self.config.L_cycles * n_L_layers + 1
         total_surprise = total_surprise / max(num_surprise_terms, 1)
 
-        # Outputs (use H state for final prediction)
+        # IMPORTANT: Use l_state for output (not h_state!)
+        # l_state is the main computational state that has been refined through cycles
+        output = self.lm_head(l_state)[:, self.puzzle_emb_len:]
+        q_logits = self.q_head(l_state[:, 0]).to(torch.float32)
+
+        # Create carry (only the placeholder, not l_state - state is in memory weights)
         new_carry = TRM_Titans_InnerCarry(
             _device_placeholder=torch.empty(1, device=device, dtype=self.forward_dtype)
         )
-        output = self.lm_head(h_state)[:, self.puzzle_emb_len:]
-        q_logits = self.q_head(h_state[:, 0]).to(torch.float32)
 
         return new_carry, output, (q_logits[..., 0], q_logits[..., 1]), total_surprise
 
@@ -1407,9 +1442,18 @@ class TRM_Titans(nn.Module):
     def puzzle_emb(self):
         return self.inner.puzzle_emb
 
+    @property
+    def memory_H(self):
+        """Access global H-level memory."""
+        return self.inner.memory_H
+
+    def reset_memory_H(self, batch_size: int = None, device: torch.device = None):
+        """Reset global H-level memory."""
+        self.inner.reset_memory_H(batch_size=batch_size, device=device)
+
     def freeze_memory_templates(self):
         """
-        Freeze memory template weights to prevent LM loss gradients.
+        Freeze all memory template weights including memory_H.
 
         Titans Design:
         - Memory learns ONLY during forward pass via memory.update() (surprise-based)
@@ -1422,11 +1466,13 @@ class TRM_Titans(nn.Module):
 
         Memory parameters frozen:
         - *.self_attn.memory.template_up/down (layer memories)
+        - *.memory_H.* (global H-level memory)
         - *.mem_lr, *.mem_decay (memory hyperparameters)
         """
         for name, param in self.named_parameters():
             is_memory = (
                 '.self_attn.memory.' in name or
+                '.memory_H.' in name or
                 '.mem_lr' in name or
                 '.mem_decay' in name
             )
@@ -1443,6 +1489,7 @@ class TRM_Titans(nn.Module):
         for name, param in self.named_parameters():
             is_memory = (
                 '.self_attn.memory.' in name or
+                '.memory_H.' in name or
                 '.mem_lr' in name or
                 '.mem_decay' in name
             )
@@ -1543,6 +1590,117 @@ class TRM_Titans(nn.Module):
 
 
 # =============================================================================
+# TRM Checkpoint Loading Utilities
+# =============================================================================
+
+def load_from_trm_checkpoint(
+    model: TRM_Titans,
+    checkpoint_path: str,
+    strict: bool = False,
+    verbose: bool = True
+) -> Dict[str, List[str]]:
+    """
+    Load compatible weights from a pretrained TRM checkpoint.
+
+    This enables transfer learning from TRM to TRM-Titans:
+    - Attention weights (qkv_proj, o_proj) are directly compatible
+    - MLP weights are compatible if expansion factor matches
+    - H_init from TRM initializes memory_H pattern
+    - L_init from TRM initializes l_state starting point
+
+    Args:
+        model: TRM_Titans model to load weights into
+        checkpoint_path: Path to TRM checkpoint file
+        strict: If True, raise error on incompatible weights
+        verbose: Print loading statistics
+
+    Returns:
+        Dict with 'loaded', 'skipped', 'missing' key lists
+    """
+    # Load checkpoint
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+
+    # Handle different checkpoint formats
+    if isinstance(checkpoint, dict) and any(k.startswith('_orig_mod') for k in checkpoint.keys()):
+        trm_state = checkpoint
+    elif 'model' in checkpoint:
+        trm_state = checkpoint['model']
+    elif 'state_dict' in checkpoint:
+        trm_state = checkpoint['state_dict']
+    else:
+        trm_state = checkpoint
+
+    # Key mapping from TRM to TRM-Titans
+    # TRM format: _orig_mod.model.inner.X
+    # TRM-Titans format: inner.X
+
+    loaded_keys = []
+    skipped_keys = []
+    missing_keys = []
+
+    model_state = model.state_dict()
+    new_state = {}
+
+    for trm_key, trm_value in trm_state.items():
+        # Remove _orig_mod.model. prefix if present
+        clean_key = trm_key.replace('_orig_mod.model.', '')
+
+        # Special handling for H_init and L_init
+        if clean_key == 'inner.H_init':
+            # Use H_init to initialize memory_H template
+            # H_init is [hidden_size], need to use it for memory initialization
+            if 'inner.H_init' in model_state:
+                new_state['inner.H_init'] = trm_value
+                loaded_keys.append(f'{trm_key} -> inner.H_init')
+            continue
+
+        if clean_key == 'inner.L_init':
+            if 'inner.L_init' in model_state:
+                new_state['inner.L_init'] = trm_value
+                loaded_keys.append(f'{trm_key} -> inner.L_init')
+            continue
+
+        # Skip memory-related keys (TRM doesn't have them)
+        if '.memory.' in clean_key or 'memory_H' in clean_key:
+            continue
+
+        # Check if key exists in TRM-Titans model
+        if clean_key in model_state:
+            if trm_value.shape == model_state[clean_key].shape:
+                new_state[clean_key] = trm_value
+                loaded_keys.append(f'{trm_key} -> {clean_key}')
+            else:
+                skipped_keys.append(
+                    f'{trm_key}: shape mismatch '
+                    f'(TRM: {trm_value.shape}, Titans: {model_state[clean_key].shape})'
+                )
+        else:
+            missing_keys.append(f'{trm_key} (no match in TRM-Titans)')
+
+    # Load the compatible weights
+    model.load_state_dict(new_state, strict=False)
+
+    if verbose:
+        print(f"=== TRM Checkpoint Loading Results ===")
+        print(f"Loaded: {len(loaded_keys)} weights")
+        print(f"Skipped (shape mismatch): {len(skipped_keys)} weights")
+        print(f"Missing (no match): {len(missing_keys)} weights")
+
+        if skipped_keys:
+            print(f"\nSkipped weights:")
+            for k in skipped_keys[:5]:
+                print(f"  - {k}")
+            if len(skipped_keys) > 5:
+                print(f"  ... and {len(skipped_keys) - 5} more")
+
+    return {
+        'loaded': loaded_keys,
+        'skipped': skipped_keys,
+        'missing': missing_keys
+    }
+
+
+# =============================================================================
 # TRM-Titans ACT Loss Head
 # =============================================================================
 
@@ -1584,6 +1742,7 @@ class TRM_Titans_ACTLossHead(nn.Module):
         for name, param in self.model.named_parameters():
             is_memory = (
                 '.self_attn.memory.' in name or
+                '.memory_H.' in name or
                 '.mem_lr' in name or
                 '.mem_decay' in name
             )
@@ -1604,6 +1763,7 @@ class TRM_Titans_ACTLossHead(nn.Module):
                 for name, param in self.model.named_parameters():
                     is_memory = (
                         '.self_attn.memory.' in name or
+                        '.memory_H.' in name or
                         '.mem_lr' in name or
                         '.mem_decay' in name
                     )
