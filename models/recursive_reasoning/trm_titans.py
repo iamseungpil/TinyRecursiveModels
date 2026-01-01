@@ -1349,13 +1349,12 @@ class TRM_Titans_Inner(nn.Module):
         # The final H_cycle with gradients provides sufficient learning signal.
         with torch.no_grad():
             for _H_step in range(self.config.H_cycles - 1):
-                # Get h_state from memory_H (memory retrieval)
+                # h_state computed ONCE per H_cycle (same as final H_cycle with grad)
                 h_state = self.memory_H(l_state)
 
                 l_state_before = l_state.clone()
                 for _L_step in range(self.config.L_cycles):
-                    # l_injection = h_state + input_embeddings
-                    # h_state provides context from memory, input_embeddings provides task info
+                    # h_state is FIXED during L_cycles (TRM design)
                     l_injection = h_state + input_embeddings
                     l_state, surprise = self.L_level(
                         l_state, l_injection,
@@ -1364,17 +1363,22 @@ class TRM_Titans_Inner(nn.Module):
                         **seq_info
                     )
 
-                # Update memory_H: learn l_state evolution pattern
-                # Key: l_state_before, Value: l_state_after
+                # Update memory_H once per H_cycle (coarse-grained)
                 if update_memory:
                     self.memory_H.update(l_state_before, l_state, create_graph=False)
 
         # Final H_cycle with grad
-        # Get h_state from memory_H
+        # Get h_state from memory_H (computed ONCE per H_cycle, matching TRM design)
+        # INTENTIONAL: h_state is FIXED during all L_cycles within this H_cycle.
+        # This matches original TRM where z_H is updated once per H_cycle, not per L_cycle.
+        # - H-level (h_state): slow, abstract context - updated once per H_cycle
+        # - L-level (l_state): fast, concrete computation - updated each L_cycle
         h_state = self.memory_H(l_state)
 
         l_state_before = l_state.clone()
         for _L_step in range(self.config.L_cycles):
+            # h_state provides fixed high-level context (like original TRM's z_H)
+            # l_state evolves each iteration (like original TRM's z_L)
             l_injection = h_state + input_embeddings
             l_state, surprise = self.L_level(
                 l_state, l_injection,
@@ -1384,7 +1388,9 @@ class TRM_Titans_Inner(nn.Module):
             )
             total_surprise = total_surprise + surprise
 
-        # Update memory_H with gradient
+        # Update memory_H ONCE per H_cycle (coarse-grained learning)
+        # memory_H learns: l_state_before_L_cycles -> l_state_after_L_cycles
+        # This matches TRM's H update frequency (once per H_cycle)
         if update_memory:
             mem_surprise = self.memory_H.update(l_state_before, l_state, create_graph=should_create_graph)
             total_surprise = total_surprise + mem_surprise
