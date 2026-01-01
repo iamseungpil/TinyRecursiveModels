@@ -482,17 +482,25 @@ class TitansMemory(nn.Module):
             return self.template_up.weight, self.template_down.weight
         return self._current_up_weight, self._current_down_weight
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, force_templates: bool = False) -> torch.Tensor:
         """
         Forward pass through memory using current state weights.
 
         Args:
             x: Input tensor [B, L, D]
+            force_templates: If True, always use template weights (for v4 backprop learning).
+                            This ensures gradients flow to template weights.
 
         Returns:
             output: Memory output [B, L, output_dim]
         """
-        up_w, down_w = self._get_weights()
+        if force_templates:
+            # v4 mode: Always use templates for backprop learning
+            # This ensures gradients flow: loss -> output -> templates
+            up_w = self.template_up.weight
+            down_w = self.template_down.weight
+        else:
+            up_w, down_w = self._get_weights()
 
         if up_w.dim() == 3:
             # Batch-aware: [B, hidden, input] x [B, L, input] -> [B, L, hidden]
@@ -1610,7 +1618,7 @@ class TRM_Titans_Inner(nn.Module):
                 # 1. Strategy retrieval: h_state from memory_H
                 # memory_H encodes "solving strategies" - retrieved based on current l_state
                 # Note: Using templates directly (no _current_weights needed for backprop learning)
-                h_state = self.memory_H(l_state)
+                h_state = self.memory_H(l_state, force_templates=True)
 
                 # 2. L_cycles: Latent reasoning with h_state guidance
                 # l_state evolves through attention, using h_state as context
@@ -1628,7 +1636,7 @@ class TRM_Titans_Inner(nn.Module):
 
         # Final H_cycle with grad
         # 1. Strategy retrieval (final, with gradient tracking for backprop)
-        h_state = self.memory_H(l_state)
+        h_state = self.memory_H(l_state, force_templates=True)
 
         # 2. L_cycles: Latent reasoning with gradient tracking
         for _L_step in range(self.config.L_cycles):
@@ -1644,7 +1652,7 @@ class TRM_Titans_Inner(nn.Module):
         # 3. Final strategy retrieval for output
         # This h_state will be used for LM output (strategy -> answer)
         # Gradients flow: loss -> lm_head -> h_state -> memory_H weights
-        h_state = self.memory_H(l_state)
+        h_state = self.memory_H(l_state, force_templates=True)
 
         # Synchronize all GPUs after memory updates before final output computation
         # This prevents NCCL timeout from GPU desync during distributed training
