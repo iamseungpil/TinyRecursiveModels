@@ -1,16 +1,43 @@
 """
-TRM-Titans: Tiny Recursive Model with Titans-style Implicit Memory
+TRM-Titans v3: Tiny Recursive Model with Titans-style Implicit Memory
 
-This module implements the Titans architecture where:
-- Memory weights ARE the state (no explicit z_H, z_L tensors)
-- Layer memories inside L_level blocks replace z_H, z_L roles
-- Memory updates happen via gradient descent on prediction error
+This module implements the TRM-Titans v3 architecture where:
+- Attention -> l_state (contextual, fast, L_cycles times per H_cycle)
+- MLP -> h_state ground truth (abstract, slow, once per H_cycle)
+- memory_H learns to predict MLP output (for test-time adaptation)
+- Output from h_state (like original TRM outputs from z_H)
+
+=== TRM-TITANS V3 CORE DESIGN ===
+1. Split Attention and MLP:
+   - attention_forward(): Produces l_state (called L_cycles times per H_cycle)
+   - mlp_forward(): Produces h_state ground truth (called once per H_cycle)
+   - memory_H: Learns to predict MLP output (for test-time when MLP is frozen)
+
+2. Two-speed Processing:
+   - l_state: Fast, contextual processing via attention (L_cycles per H_cycle)
+   - h_state: Slow, abstract processing via MLP (once per H_cycle)
+   - memory_H: Learns MLP behavior for test-time adaptation
+
+3. Output from h_state:
+   - Like original TRM where output comes from z_H (high-level representation)
+   - h_state = MLP(l_state) during training
+   - memory_H learns to replicate MLP output
+
+4. Critical Design: Memory learns from MLP, not from itself!
+   - Training: h_state = mlp_forward(l_state), memory learns to predict this
+   - Test-time: memory_H can adapt to new patterns when MLP is frozen
+   - This prevents the circular dependency where memory learns nothing:
+     BAD:  h_state = memory_H(x), update(x, h_state) -> surprise = 0
+     GOOD: h_state = mlp(x), update(x, h_state) -> surprise > 0
 
 === TITANS CORE CONCEPTS ===
 1. Implicit State: State is stored in MLP weights, not in activation tensors
 2. Memory Update: M_t = (1 - alpha) * M_{t-1} - eta * gradient(loss(M; x))
 3. K->V Mapping: Memory learns input->output associations
-4. MAG (Memory as Gate): Combines memory output with attention via learned gate
+4. Integration Strategies (plug-and-play):
+   - MAG (Memory as Gate): Confidence-based mixing
+   - MAC (Memory as Context): Memory as attention KV context
+   - MAL (Memory as Layer): Sequential processing
 
 === KEY DIFFERENCE FROM TRM-NM ===
 - TRM-NM: Uses z_H, z_L tensors as explicit state + memory for pattern learning
@@ -18,11 +45,10 @@ This module implements the Titans architecture where:
 
 === ARCHITECTURE ===
 - Only L_level exists (like original TRM, H_layers config is ignored)
-- Layer memories inside each L_level block serve as implicit state
-- Each layer has TitansMemory (2-layer MLP) for implicit state storage
+- L_level.attention_forward(): Fast l_state updates (called L_cycles times)
+- memory_H (TitansMemory): Generates h_state from l_state (once per H_cycle)
 - H_cycles: Number of high-level reasoning cycles
 - L_cycles: Number of low-level computation cycles per H_cycle
-- Both H and L updates use the same L_level module (like original TRM)
 
 === TITANS LOSS DESIGN ===
 The Titans paper specifies that memory should learn during forward pass only:
@@ -965,6 +991,11 @@ class TRM_Titans_Block(nn.Module):
     """
     Single TRM-Titans block with pluggable memory integration and MLP.
 
+    TRM-Titans v3 Architecture:
+    - attention_forward(): Attention only -> produces l_state update (called L_cycles times)
+    - mlp_forward(): MLP only -> produces h_state (called once per H_cycle)
+    - forward(): Combined for backward compatibility (calls both)
+
     The integration strategy (MAG, MAC, or MAL) is determined by the config.
     """
 
@@ -1000,6 +1031,55 @@ class TRM_Titans_Block(nn.Module):
         """Selectively reset memory for specific samples."""
         self.self_attn.reset_memory_for_samples(reset_mask)
 
+    def attention_forward(
+        self,
+        cos_sin: CosSin,
+        hidden_states: torch.Tensor,
+        update_memory: bool = True,
+        create_graph: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Attention-only forward pass - produces l_state update.
+
+        TRM-Titans v3: This is called L_cycles times per H_cycle.
+        Attention captures fast, contextual information.
+
+        Args:
+            cos_sin: Rotary position embeddings (cos, sin) or None
+            hidden_states: Input tensor [B, L, D]
+            update_memory: Whether to update layer memory state
+            create_graph: Whether to create computation graph for backprop
+
+        Returns:
+            l_state: Updated l_state after attention [B, L, D]
+            surprise: Memory prediction error
+        """
+        attn_out, surprise = self.self_attn(
+            cos_sin=cos_sin,
+            hidden_states=hidden_states,
+            update_memory=update_memory,
+            create_graph=create_graph
+        )
+        l_state = rms_norm(hidden_states + attn_out, variance_epsilon=self.norm_eps)
+        return l_state, surprise
+
+    def mlp_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+        MLP-only forward pass - produces h_state.
+
+        TRM-Titans v3: This is called once per H_cycle.
+        MLP captures slow, abstract information.
+
+        Args:
+            hidden_states: Input tensor [B, L, D]
+
+        Returns:
+            h_state: Updated h_state after MLP [B, L, D]
+        """
+        mlp_out = self.mlp(hidden_states)
+        h_state = rms_norm(hidden_states + mlp_out, variance_epsilon=self.norm_eps)
+        return h_state
+
     def forward(
         self,
         cos_sin: CosSin,
@@ -1007,21 +1087,32 @@ class TRM_Titans_Block(nn.Module):
         update_memory: bool = True,
         create_graph: bool = False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Forward pass through block."""
-        # Attention + MAG
-        attn_out, surprise = self.self_attn(
+        """
+        Full forward pass through block (backward compatibility).
+
+        Calls both attention_forward and mlp_forward sequentially.
+        Returns h_state as main output.
+
+        Args:
+            cos_sin: Rotary position embeddings (cos, sin) or None
+            hidden_states: Input tensor [B, L, D]
+            update_memory: Whether to update memory state
+            create_graph: Whether to create computation graph for backprop
+
+        Returns:
+            h_state: Output after attention + MLP [B, L, D]
+            surprise: Memory prediction error
+        """
+        # Attention -> l_state
+        l_state, surprise = self.attention_forward(
             cos_sin=cos_sin,
             hidden_states=hidden_states,
             update_memory=update_memory,
             create_graph=create_graph
         )
-        hidden_states = rms_norm(hidden_states + attn_out, variance_epsilon=self.norm_eps)
-
-        # MLP
-        mlp_out = self.mlp(hidden_states)
-        hidden_states = rms_norm(hidden_states + mlp_out, variance_epsilon=self.norm_eps)
-
-        return hidden_states, surprise
+        # MLP -> h_state
+        h_state = self.mlp_forward(l_state)
+        return h_state, surprise
 
 
 # =============================================================================
@@ -1029,7 +1120,14 @@ class TRM_Titans_Block(nn.Module):
 # =============================================================================
 
 class TRM_Titans_ReasoningModule(nn.Module):
-    """Reasoning module with multiple TRM-Titans blocks."""
+    """
+    Reasoning module with multiple TRM-Titans blocks.
+
+    TRM-Titans v3 Architecture:
+    - attention_forward(): Run attention through all layers (fast, L_cycles times)
+    - mlp_forward(): Run MLP through all layers (slow, once per H_cycle)
+    - forward(): Combined for backward compatibility
+    """
 
     def __init__(self, layers: List[TRM_Titans_Block]):
         super().__init__()
@@ -1045,6 +1143,62 @@ class TRM_Titans_ReasoningModule(nn.Module):
         for layer in self.layers:
             layer.reset_memory_for_samples(reset_mask)
 
+    def attention_forward(
+        self,
+        hidden_states: torch.Tensor,
+        input_injection: torch.Tensor,
+        update_memory: bool = True,
+        create_graph: bool = False,
+        **kwargs
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Run attention through all layers (L-level fast processing).
+
+        TRM-Titans v3: This is called L_cycles times per H_cycle.
+        Captures contextual, fast information through attention only.
+
+        Args:
+            hidden_states: Current l_state [B, L, D]
+            input_injection: Injection from h_state + input_embeddings [B, L, D]
+            update_memory: Whether to update layer memories
+            create_graph: Whether to create computation graph for backprop
+            **kwargs: Additional arguments (e.g., cos_sin for RoPE)
+
+        Returns:
+            l_state: Updated l_state after attention through all layers [B, L, D]
+            total_surprise: Sum of surprise values from all layers
+        """
+        hidden_states = hidden_states + input_injection
+        total_surprise = torch.tensor(0.0, device=hidden_states.device, dtype=torch.float32)
+
+        for layer in self.layers:
+            hidden_states, surprise = layer.attention_forward(
+                hidden_states=hidden_states,
+                update_memory=update_memory,
+                create_graph=create_graph,
+                **kwargs
+            )
+            total_surprise = total_surprise + surprise
+
+        return hidden_states, total_surprise
+
+    def mlp_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+        Run MLP through all layers (H-level slow processing).
+
+        TRM-Titans v3: This is called once per H_cycle.
+        Captures abstract, slow information through MLP only.
+
+        Args:
+            hidden_states: Current state [B, L, D]
+
+        Returns:
+            h_state: Updated h_state after MLP through all layers [B, L, D]
+        """
+        for layer in self.layers:
+            hidden_states = layer.mlp_forward(hidden_states)
+        return hidden_states
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1053,7 +1207,22 @@ class TRM_Titans_ReasoningModule(nn.Module):
         create_graph: bool = False,
         **kwargs
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Forward through all layers."""
+        """
+        Full forward through all layers (backward compatibility).
+
+        Calls both attention and MLP for each layer sequentially.
+
+        Args:
+            hidden_states: Input tensor [B, L, D]
+            input_injection: Injection tensor [B, L, D]
+            update_memory: Whether to update memory state
+            create_graph: Whether to create computation graph for backprop
+            **kwargs: Additional arguments (e.g., cos_sin for RoPE)
+
+        Returns:
+            output: Output after all layers [B, L, D]
+            total_surprise: Sum of surprise values from all layers
+        """
         hidden_states = hidden_states + input_injection
         total_surprise = torch.tensor(0.0, device=hidden_states.device, dtype=torch.float32)
 
@@ -1074,7 +1243,16 @@ class TRM_Titans_ReasoningModule(nn.Module):
 # =============================================================================
 
 class TRM_Titans_Config(BaseModel):
-    """Configuration for TRM-Titans model."""
+    """
+    Configuration for TRM-Titans model.
+
+    TRM-Titans v3 Architecture:
+    - Attention -> l_state (contextual, fast, L_cycles times)
+    - MLP/Memory -> h_state (abstract, slow, once per H_cycle)
+    - Output from h_state (like original TRM outputs from z_H)
+
+    Integration types are plug-and-play at the attention layer level.
+    """
     batch_size: int
     seq_len: int
     puzzle_emb_ndim: int = 0
@@ -1110,11 +1288,35 @@ class TRM_Titans_Config(BaseModel):
     memory_hidden_mult: int = 4
     surprise_loss_weight: float = 0.1
 
-    # Integration type for memory-attention combination
+    # Integration type for memory-attention combination (plug-and-play)
     # Options: "mag" (Memory as Gate), "mac" (Memory as Context), "mal" (Memory as Layer)
     integration_type: str = "mag"
     # For MAL integration: "memory_first" or "attention_first"
     mal_order: str = "memory_first"
+
+    def model_post_init(self, __context):
+        """Validate configuration after initialization."""
+        # Validate integration_type
+        valid_integration_types = {"mag", "mac", "mal"}
+        if self.integration_type not in valid_integration_types:
+            raise ValueError(
+                f"integration_type must be one of {valid_integration_types}, "
+                f"got '{self.integration_type}'"
+            )
+
+        # Validate mal_order
+        valid_mal_orders = {"memory_first", "attention_first"}
+        if self.mal_order not in valid_mal_orders:
+            raise ValueError(
+                f"mal_order must be one of {valid_mal_orders}, "
+                f"got '{self.mal_order}'"
+            )
+
+        # Validate cycles
+        if self.H_cycles < 1:
+            raise ValueError(f"H_cycles must be >= 1, got {self.H_cycles}")
+        if self.L_cycles < 1:
+            raise ValueError(f"L_cycles must be >= 1, got {self.L_cycles}")
 
 
 # =============================================================================
@@ -1150,13 +1352,36 @@ class TRM_Titans_Carry:
 
 class TRM_Titans_Inner(nn.Module):
     """
-    Inner model for TRM-Titans.
+    Inner model for TRM-Titans v3.
 
-    Architecture (matches original TRM with Titans memory):
-    - NO z_H, z_L tensors in carry
-    - Only L_level exists (like original TRM, H_layers is ignored)
-    - Layer memories inside L_level blocks store state in their weights
-    - H/L cycles structure: L_cycles per H_cycle, H update uses L_level
+    TRM-Titans v3 Architecture:
+    - Attention -> l_state (contextual, fast, L_cycles times per H_cycle)
+    - MLP -> h_state ground truth (abstract, slow, once per H_cycle)
+    - memory_H learns to predict MLP output (for test-time adaptation)
+    - Output from h_state (like original TRM outputs from z_H)
+
+    Key components:
+    - L_level: Reasoning module with attention_forward() and mlp_forward()
+    - memory_H: TitansMemory that learns to predict L_level.mlp_forward() output
+    - H_init, L_init: Learnable initial states
+
+    Forward loop structure:
+        For each H_cycle:
+            1. L_cycles of attention-only: l_state = L_level.attention_forward(...)
+            2. H update (once):
+               - h_state_mlp = L_level.mlp_forward(l_state)  # MLP ground truth
+               - memory_H.update(l_state, h_state_mlp)       # Memory learns MLP behavior
+               - h_state = h_state_mlp                       # Use MLP output
+        Final output from h_state
+
+    Critical Design - Memory learns from MLP, not from itself:
+    - BAD:  h_state = memory_H(x), update(x, h_state) -> surprise = 0 (no learning!)
+    - GOOD: h_state = mlp(x), update(x, h_state) -> surprise > 0 (memory learns MLP)
+
+    Properties:
+    - NO z_H, z_L tensors in carry (state is in memory weights)
+    - H_layers config is ignored (like original TRM)
+    - Integration types (MAG/MAC/MAL) are plug-and-play at attention layer level
     """
 
     def __init__(self, config: TRM_Titans_Config) -> None:
@@ -1284,22 +1509,37 @@ class TRM_Titans_Inner(nn.Module):
         create_graph: bool = False
     ) -> Tuple[TRM_Titans_InnerCarry, torch.Tensor, Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """
-        Forward pass using TRM-Titans v2 architecture.
+        Forward pass using TRM-Titans v3 architecture.
+
+        TRM-Titans v3 Core Design:
+            - Attention -> l_state (contextual, fast, L_cycles times per H_cycle)
+            - MLP -> h_state ground truth (abstract, slow, once per H_cycle)
+            - memory_H learns to predict MLP output (for test-time adaptation)
+            - Output from h_state (like original TRM outputs from z_H)
 
         Architecture:
-            l_state (explicit tensor) -> L_level(l_state, h_state + input) -> l_state' -> lm_head -> output
-                                              ^
-                                         h_state = memory_H(l_state)
+            For each H_cycle:
+                1. L_cycles of attention-only:
+                   l_state = L_level.attention_forward(l_state, h_state + input)
+                2. H update (once):
+                   h_state_mlp = L_level.mlp_forward(l_state)  # MLP ground truth
+                   memory_H.update(l_state, h_state_mlp)       # Memory learns MLP
+                   h_state = h_state_mlp                       # Use MLP output
+            Final output from h_state (not l_state!)
 
-        Key design:
-        - l_state is the main computational state that produces output
-        - h_state from memory_H is only used as injection context
-        - memory_H learns the l_state evolution pattern (key=l_state_before, value=l_state_after)
-        - Layer-level memories in L_level remain unchanged
+        Key design principles:
+        - l_state captures fast, contextual information through attention
+        - h_state = MLP(l_state) provides slow, abstract ground truth
+        - memory_H learns to replicate MLP behavior for test-time adaptation
+        - Output comes from h_state (like original TRM outputs from z_H)
+
+        Critical: Memory learns from MLP, not from itself!
+        - BAD:  h_state = memory_H(x), update(x, h_state) -> surprise = 0 (ZERO learning!)
+        - GOOD: h_state = mlp(x), update(x, h_state) -> surprise > 0 (memory learns MLP)
 
         Returns:
             new_carry: Updated carry (minimal)
-            output: LM logits
+            output: LM logits (from h_state = MLP output)
             (q_halt_logits, q_continue_logits): Halting logits
             total_surprise: Sum of memory surprises (layer memories + memory_H)
         """
@@ -1335,13 +1575,28 @@ class TRM_Titans_Inner(nn.Module):
             for layer in self.L_level.layers
         )
 
+        # Warn if memory states are desynchronized (indicates potential bug)
+        if memory_h_needs_reset != l_level_needs_reset:
+            warnings.warn(
+                f"TRM_Titans: Memory state desync detected. "
+                f"memory_H needs reset: {memory_h_needs_reset}, "
+                f"L_level needs reset: {l_level_needs_reset}. "
+                "This may indicate a bug in memory management.",
+                stacklevel=2
+            )
+
         # Reset ALL memories together to maintain synchronized state
         if memory_h_needs_reset or l_level_needs_reset:
             self.reset_all_memory(batch_size=batch_size, device=device)
 
-        # Initialize l_state from L_init + input_embeddings
-        # L_init provides a learnable starting point for the L-level state
+        # Initialize states
+        # l_state: starts from L_init + input_embeddings (fast, contextual)
+        # h_state: starts from H_init (slow, abstract)
+        # Note: input_embeddings shape is [B, actual_seq_len, D] where actual_seq_len
+        # includes puzzle_emb_len ONLY if puzzle_emb_ndim > 0
         l_state = self.L_init.view(1, 1, -1) + input_embeddings
+        actual_seq_len = input_embeddings.shape[1]  # Use actual length from embeddings
+        h_state = self.H_init.view(1, 1, -1).expand(batch_size, actual_seq_len, -1)
 
         # H_cycles-1 without grad (INTENTIONAL for efficiency)
         # This matches original TRM design where only final cycle has gradients.
@@ -1349,38 +1604,37 @@ class TRM_Titans_Inner(nn.Module):
         # The final H_cycle with gradients provides sufficient learning signal.
         with torch.no_grad():
             for _H_step in range(self.config.H_cycles - 1):
-                # h_state computed ONCE per H_cycle (same as final H_cycle with grad)
-                h_state = self.memory_H(l_state)
-
-                l_state_before = l_state.clone()
+                # L_cycles: Attention only (fast, contextual)
+                # l_state is updated L_cycles times per H_cycle
                 for _L_step in range(self.config.L_cycles):
-                    # h_state is FIXED during L_cycles (TRM design)
                     l_injection = h_state + input_embeddings
-                    l_state, surprise = self.L_level(
+                    l_state, surprise = self.L_level.attention_forward(
                         l_state, l_injection,
                         update_memory=update_memory,
                         create_graph=False,
                         **seq_info
                     )
 
-                # Update memory_H once per H_cycle (coarse-grained)
+                # H update: MLP produces ground-truth h_state (slow, abstract)
+                # CRITICAL FIX: Use MLP output as ground truth, NOT memory output
+                # This ensures memory_H learns meaningful patterns:
+                #   surprise = ||memory_H(l_state) - MLP(l_state)||² > 0
+                # Previously h_state = memory_H(l_state) caused:
+                #   surprise = ||memory_H(l_state) - memory_H(l_state)||² = 0 (no learning!)
+                h_state_mlp = self.L_level.mlp_forward(l_state)  # MLP ground truth
+
+                # Update memory_H to predict MLP output (for test-time when MLP is frozen)
                 if update_memory:
-                    self.memory_H.update(l_state_before, l_state, create_graph=False)
+                    self.memory_H.update(l_state, h_state_mlp, create_graph=False)
+
+                # Use MLP output as h_state for next cycle
+                h_state = h_state_mlp
 
         # Final H_cycle with grad
-        # Get h_state from memory_H (computed ONCE per H_cycle, matching TRM design)
-        # INTENTIONAL: h_state is FIXED during all L_cycles within this H_cycle.
-        # This matches original TRM where z_H is updated once per H_cycle, not per L_cycle.
-        # - H-level (h_state): slow, abstract context - updated once per H_cycle
-        # - L-level (l_state): fast, concrete computation - updated each L_cycle
-        h_state = self.memory_H(l_state)
-
-        l_state_before = l_state.clone()
+        # L_cycles: Attention only (fast, contextual) with gradient tracking
         for _L_step in range(self.config.L_cycles):
-            # h_state provides fixed high-level context (like original TRM's z_H)
-            # l_state evolves each iteration (like original TRM's z_L)
             l_injection = h_state + input_embeddings
-            l_state, surprise = self.L_level(
+            l_state, surprise = self.L_level.attention_forward(
                 l_state, l_injection,
                 update_memory=update_memory,
                 create_graph=should_create_graph,
@@ -1388,18 +1642,18 @@ class TRM_Titans_Inner(nn.Module):
             )
             total_surprise = total_surprise + surprise
 
-        # Update memory_H ONCE per H_cycle (coarse-grained learning)
-        # memory_H learns: l_state_before_L_cycles -> l_state_after_L_cycles
-        # This matches TRM's H update frequency (once per H_cycle)
+        # Final H update: MLP produces ground-truth h_state
+        # CRITICAL FIX: Use MLP output as ground truth for memory learning
+        # This is the h_state that will be used for output (like original TRM's z_H)
+        h_state_mlp = self.L_level.mlp_forward(l_state)  # MLP ground truth
+
+        # Update memory_H to predict MLP output
         if update_memory:
-            mem_surprise = self.memory_H.update(l_state_before, l_state, create_graph=should_create_graph)
+            mem_surprise = self.memory_H.update(l_state, h_state_mlp, create_graph=should_create_graph)
             total_surprise = total_surprise + mem_surprise
 
-        # NOTE: DO NOT detach l_state before output computation!
-        # During test-time adaptation, model is in eval() mode but needs gradients
-        # for puzzle_emb updates. The l_state must maintain gradients for:
-        # 1. LM loss backprop (training)
-        # 2. puzzle_emb updates during test-time adaptation (eval mode)
+        # Use MLP output as final h_state for output
+        h_state = h_state_mlp
 
         # Synchronize all GPUs after memory updates before final output computation
         # This prevents NCCL timeout from GPU desync during distributed training
@@ -1408,17 +1662,18 @@ class TRM_Titans_Inner(nn.Module):
         # Normalize surprise by the number of surprise terms accumulated
         #
         # Surprise counting for the FINAL H_cycle only (previous cycles run without grad):
-        # - L_cycles calls to L_level: each returns SUM of L_layers surprises
+        # - L_cycles calls to L_level.attention_forward: each returns SUM of L_layers surprises
         # - 1 memory_H update surprise
         # Total: L_cycles * L_layers + 1 (all from final H_cycle)
         n_L_layers = len(self.L_level.layers)
         num_surprise_terms = self.config.L_cycles * n_L_layers + 1
         total_surprise = total_surprise / max(num_surprise_terms, 1)
 
-        # IMPORTANT: Use l_state for output (not h_state!)
-        # l_state is the main computational state that has been refined through cycles
-        output = self.lm_head(l_state)[:, self.puzzle_emb_len:]
-        q_logits = self.q_head(l_state[:, 0]).to(torch.float32)
+        # OUTPUT FROM h_state (like original TRM outputs from z_H!)
+        # h_state captures the slow, abstract representation after all cycles
+        # This is the key change from v2 where output came from l_state
+        output = self.lm_head(h_state)[:, self.puzzle_emb_len:]
+        q_logits = self.q_head(h_state[:, 0]).to(torch.float32)
 
         # Create carry (only the placeholder, not l_state - state is in memory weights)
         new_carry = TRM_Titans_InnerCarry(
@@ -1434,18 +1689,31 @@ class TRM_Titans_Inner(nn.Module):
 
 class TRM_Titans(nn.Module):
     """
-    TRM with Titans-style Memory - ACT wrapper.
+    TRM-Titans v3 with ACT (Adaptive Computation Time) wrapper.
 
-    Architecture (matches original TRM with Titans memory):
+    TRM-Titans v3 Core Design:
+    - Attention -> l_state (contextual, fast, L_cycles times per H_cycle)
+    - MLP -> h_state ground truth (abstract, slow, once per H_cycle)
+    - memory_H learns to predict MLP output (for test-time adaptation)
+    - Output from h_state (like original TRM outputs from z_H)
+
+    Architecture:
     - Only L_level exists (H_layers is ignored, like original TRM)
-    - Layer memories inside each block serve as implicit state (replacing z_H, z_L)
-    - H/L cycles structure maintained: L_cycles per H_cycle, H update uses L_level
+    - L_level.attention_forward(): Fast l_state updates (L_cycles per H_cycle)
+    - L_level.mlp_forward(): Produces h_state ground truth (once per H_cycle)
+    - memory_H: TitansMemory that learns to predict MLP output
+    - Integration types (MAG/MAC/MAL) are plug-and-play via config
 
     Titans Memory Design:
     - Memory template weights (template_up, template_down) are frozen during training
     - Memory _current_weights adapt during forward pass via surprise-based update
+    - memory_H learns to predict MLP output: update(l_state, mlp(l_state))
     - LM loss does NOT affect memory templates
     - Call freeze_memory_templates() before training to enforce this
+
+    Critical Design - Memory learns from MLP, not from itself:
+    - BAD:  h_state = memory_H(x), update(x, h_state) -> surprise = 0 (ZERO learning!)
+    - GOOD: h_state = mlp(x), update(x, h_state) -> surprise > 0 (memory learns MLP)
     """
 
     def __init__(self, config_dict: dict):
