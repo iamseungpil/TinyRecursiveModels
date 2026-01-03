@@ -38,12 +38,13 @@ H-level state.
 
 === V7 FORWARD LOOP STRUCTURE ===
 ```python
+zero_injection = torch.zeros_like(input_embeddings)  # H_step: no input injection
 for _H_step in range(H_cycles):
-    # L_cycles: z_L evolves, Memory reads but does NOT update
+    # L_cycles: z_L evolves with input injection, Memory reads but does NOT update
     for _L_step in range(L_cycles):
         z_L = L_level.forward(z_L, input_embeddings, update_memory=False)
-    # H_cycle end: Memory updates ONCE
-    z_L = L_level.forward(z_L, input_embeddings, update_memory=True)
+    # H_cycle end: Memory updates ONCE (no input injection!)
+    z_L = L_level.forward(z_L, zero_injection, update_memory=True)
 # Output from z_L
 ```
 
@@ -1393,11 +1394,12 @@ class TRM_Titans_Inner(nn.Module):
     - L_init: Fixed initial state for z_L as nn.Buffer
 
     Forward loop structure (v7 design):
+        zero_injection = torch.zeros_like(input_embeddings)
         For each H_cycle:
             For each L_cycle:
                 z_L = L_level.forward(z_L, input_embeddings, update_memory=False)
-            # Memory updates ONCE at H_cycle end
-            z_L = L_level.forward(z_L, input_embeddings, update_memory=True)
+            # H_step: transformation always runs, memory updates conditionally
+            z_L = L_level.forward(z_L, zero_injection, update_memory=update_memory)
         Output from z_L
 
     Key Design Principles (v7):
@@ -1584,8 +1586,8 @@ class TRM_Titans_Inner(nn.Module):
             For each H_cycle:
                 For each L_cycle:
                     z_L = L_level.forward(z_L, input_embeddings, update_memory=False)
-                # Memory updates ONCE at H_cycle end
-                z_L = L_level.forward(z_L, input_embeddings, update_memory=True)
+                # H_step: transformation always runs, memory updates conditionally
+                z_L = L_level.forward(z_L, zero_injection, update_memory=update_memory)
             Output from z_L
 
         Key design principles (v7):
@@ -1615,6 +1617,7 @@ class TRM_Titans_Inner(nn.Module):
         input_embeddings = self._input_embeddings(batch["inputs"], batch["puzzle_identifiers"], update_memory=update_memory)
 
         total_surprise = torch.tensor(0.0, device=device, dtype=torch.float32)
+        zero_injection = torch.zeros_like(input_embeddings)  # H_step: no input injection
         should_create_graph = create_graph and self.training
 
         # Initialize layer memory states if needed
@@ -1641,14 +1644,14 @@ class TRM_Titans_Inner(nn.Module):
                         create_graph=False,
                         **seq_info
                     )
-                # H_cycle end: Memory updates ONCE (if update_memory is True)
-                if update_memory:
-                    z_L, surprise = self.L_level.forward(
-                        z_L, input_embeddings,
-                        update_memory=True,  # Update only at H_cycle end
-                        create_graph=False,
-                        **seq_info
-                    )
+                # H_cycle end: H_step transformation always runs, memory updates conditionally
+                # H_step uses zero_injection: transformation without input injection
+                z_L, _ = self.L_level.forward(
+                    z_L, zero_injection,  # H_step: no input injection
+                    update_memory=update_memory,  # Pass through external flag
+                    create_graph=False,
+                    **seq_info
+                )
 
         # Final H_cycle with grad
         # L_cycles: z_L evolves, Memory reads but does NOT update
@@ -1660,14 +1663,15 @@ class TRM_Titans_Inner(nn.Module):
                 **seq_info
             )
 
-        # Final H_cycle end: Memory updates ONCE with gradient tracking
+        # Final H_cycle end: H_step transformation always runs, memory updates conditionally
+        # H_step uses zero_injection: transformation without input injection
+        z_L, surprise = self.L_level.forward(
+            z_L, zero_injection,  # H_step: no input injection
+            update_memory=update_memory,  # Pass through external flag
+            create_graph=should_create_graph,
+            **seq_info
+        )
         if update_memory:
-            z_L, surprise = self.L_level.forward(
-                z_L, input_embeddings,
-                update_memory=True,  # Update only at H_cycle end
-                create_graph=should_create_graph,
-                **seq_info
-            )
             total_surprise = surprise
 
         # Synchronize all GPUs after memory updates before final output computation

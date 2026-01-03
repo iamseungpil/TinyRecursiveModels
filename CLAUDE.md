@@ -114,14 +114,16 @@ mal_order: memory_first  # MAL 전용: memory_first, attention_first
 #### Forward Loop (v7)
 ```python
 z_L = carry.z_L
+zero_injection = torch.zeros_like(input_embeddings)  # H_step용
 
 for H_step in range(H_cycles):
-    # L_cycles: z_L만 업데이트, Memory는 읽기만 (update_memory=False)
+    # L_cycles: z_L 업데이트 + input injection, Memory는 읽기만
     for L_step in range(L_cycles):
-        z_L = L_level(z_L, input, update_memory=False)
+        z_L = L_level(z_L, input_embeddings, update_memory=False)
 
-    # H_cycle 끝: Memory 업데이트 1회 (update_memory=True)
-    z_L = L_level(z_L, input, update_memory=True)
+    # H_step: transformation 항상 실행, Memory 업데이트는 조건부
+    # input injection 없음 (zero_injection) - 원본 TRM의 z_H=L_level(z_H, z_L)과 유사
+    z_L = L_level(z_L, zero_injection, update_memory=update_memory)
 
 output = lm_head(z_L)  # z_L에서 직접 출력
 ```
