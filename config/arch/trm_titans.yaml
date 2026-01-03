@@ -25,6 +25,6 @@ puzzle_emb_len: 16 # if non-zero, its specified to this value
 no_ACT_continue: True # No continue ACT loss, only use the sigmoid of the halt
 
 # TRM-Titans specific: Memory parameters
-# TRM-Titans v6: z_H/z_L restored, layer memories learn via surprise
+# TRM-Titans v7: z_L only, Memory updates at H_cycle end (replaces z_H)
 memory_hidden_mult: 4  # Memory MLP hidden dimension multiplier (hidden_size * mult)
 surprise_loss_weight: 0.1  # Weight for surprise loss in total loss

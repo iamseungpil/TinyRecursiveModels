@@ -1,6 +1,6 @@
 # TinyRecursiveModels - Claude Code Memory
 
-## TRM-Titans v6 Architecture Documentation
+## TRM-Titans v7 Architecture Documentation
 
 ### 1. 목표 (Goals)
 
@@ -8,8 +8,8 @@ TRM-Titans는 **TRM (Tiny Recursive Model)의 계층적 추론 구조**와 **Tit
 
 **핵심 목표:**
 1. **Test-Time Adaptation**: 새로운 퍼즐에 대해 demo examples로 빠르게 적응
-2. **Hierarchical Reasoning**: H-level (추상화) ↔ L-level (구체화) 양방향 추론
-3. **Pattern Memory**: Surprise 기반 학습으로 input→output 패턴 저장
+2. **Simplified State**: z_L만 관리, Memory weights가 H-level 역할 대체
+3. **Pattern Memory**: Surprise 기반 학습으로 input→output 패턴 저장 (H_cycle마다)
 4. **Plug-and-Play Integration**: MAG/MAC/MAL 전략 간 쉬운 전환
 
 ---
@@ -99,64 +99,62 @@ mal_order: memory_first  # MAL 전용: memory_first, attention_first
 
 ### 3. 상태 관리 (State Management)
 
-#### 현재 v6 구현 (z_H + z_L + Memory)
+#### v7 구현 (z_L만 + Memory weights)
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Explicit State (Carry)                                  │
-│  ├── z_H: [B, L, D] - High-level state tensor           │
-│  └── z_L: [B, L, D] - Low-level state tensor            │
+│  └── z_L: [B, L, D] - 유일한 state tensor               │
 │                                                          │
-│  Implicit State (TitansMemory per block)                 │
+│  Implicit State (TitansMemory per block) - H-level 역할  │
 │  ├── _current_up_weight: [B, H, D]                      │
 │  └── _current_down_weight: [B, D, H]                    │
 └─────────────────────────────────────────────────────────┘
 ```
 
-#### Forward Loop (v6)
+#### Forward Loop (v7)
 ```python
-for H_step in range(H_cycles - 1):
-    for L_step in range(L_cycles):
-        z_L = L_level(z_L, z_H + input)  # Attn + MLP with TitansMemory
-    z_H = L_level(z_H, z_L)              # Attn + MLP with TitansMemory
+z_L = carry.z_L
 
-output = lm_head(z_H)
-```
-
-#### 순수 Titans 설계 (대안)
-만약 z_H를 제거하고 Memory weights만 H-level 역할을 하게 하면:
-```python
 for H_step in range(H_cycles):
+    # L_cycles: z_L만 업데이트, Memory는 읽기만 (update_memory=False)
     for L_step in range(L_cycles):
-        l_state = L_level(l_state, input)  # Memory weights가 H-level 대체
-        # Memory.update() 호출 → weights에 패턴 저장
+        z_L = L_level(z_L, input, update_memory=False)
 
-output = lm_head(l_state)
+    # H_cycle 끝: Memory 업데이트 1회 (update_memory=True)
+    z_L = L_level(z_L, input, update_memory=True)
+
+output = lm_head(z_L)  # z_L에서 직접 출력
 ```
-이 설계에서는 Memory weights가 "slow knowledge"를 저장하여 z_H 역할을 대신함.
+
+#### 설계 핵심
+- **z_L**: Fast state - 매 L_step마다 업데이트
+- **Memory weights**: Slow knowledge - H_cycle마다 1회 업데이트 (z_H 대체)
+- z_H tensor 없음 → Memory weights가 implicit H-level state 역할
 
 ---
 
-### 4. TRM vs Titans vs TRM-Titans 비교
+### 4. TRM vs Titans vs TRM-Titans v7 비교
 
-| 측면 | TRM (원본) | Titans | TRM-Titans v6 |
+| 측면 | TRM (원본) | Titans | TRM-Titans v7 |
 |------|-----------|--------|---------------|
-| **H-level 상태** | z_H tensor | Memory weights | z_H tensor + Memory weights |
+| **H-level 상태** | z_H tensor | Memory weights | Memory weights (z_H 제거) |
 | **L-level 상태** | z_L tensor | Activations | z_L tensor |
-| **H↔L 상호작용** | z_H ↔ z_L via L_level | Memory ↔ Attention | z_H ↔ z_L + Memory ↔ Attention |
-| **Memory 학습** | N/A | Surprise (forward) | Surprise (forward) |
-| **Attention 학습** | Backprop | Backprop | Backprop |
-| **MLP 학습** | Backprop | Backprop | Backprop |
+| **H↔L 상호작용** | z_H ↔ z_L via L_level | Memory ↔ Attention | Memory ↔ z_L (H_cycle마다) |
+| **Memory 학습** | N/A | Surprise (매 step) | Surprise (H_cycle 끝) |
+| **Attention 학습** | Backprop | Backprop | Backprop (final cycle) |
+| **MLP 학습** | Backprop | Backprop | Backprop (final cycle) |
 | **Test-Time Learning** | No | Yes (memory) | Yes (memory + puzzle_emb) |
 | **Integration** | N/A | MAG/MAC/MAL | MAG/MAC/MAL |
 
 ### 4.1 TRM과의 차이점
-1. **TitansMemory 추가**: 각 block에 Memory MLP 추가
-2. **Surprise 학습**: Memory는 backprop 없이 forward pass에서 학습
-3. **Integration Strategy**: MAG/MAC/MAL 선택 가능
-4. **Test-Time Adaptation**: TTT 지원
+1. **z_H 제거**: Memory weights가 H-level implicit state 역할
+2. **TitansMemory 추가**: 각 block에 Memory MLP 추가
+3. **Surprise 학습**: Memory는 H_cycle 끝에서 학습
+4. **Integration Strategy**: MAG/MAC/MAL 선택 가능
+5. **Test-Time Adaptation**: TTT 지원
 
 ### 4.2 Titans와의 차이점
-1. **z_H/z_L 유지**: 원본 TRM의 양방향 구조 유지
+1. **Memory 업데이트 타이밍**: H_cycle 끝에만 (매 step X)
 2. **H_cycles/L_cycles**: 계층적 반복 구조 유지
 3. **ACT (Adaptive Computation Time)**: 동적 halting 지원
 4. **Puzzle Embedding**: Task-specific embedding 학습
@@ -251,10 +249,10 @@ for epoch in epochs:
 | Memory current weights | **Surprise** | - | Forward에서 업데이트 |
 | mem_lr, mem_decay | **Frozen** | - | 고정 하이퍼파라미터 |
 
-**Carry 관리:**
-- `carry`는 `(z_H, z_L)` 텐서를 포함
+**Carry 관리 (v7):**
+- `carry`는 `z_L` 텐서만 포함 (z_H 제거됨)
 - 배치 간 **persist** (epoch 전체에서 유지)
-- Memory weights (`_current_up/down_weight`)는 모델 내부에 저장
+- Memory weights (`_current_up/down_weight`)는 모델 내부에 저장 → H-level 역할
 
 ---
 
@@ -489,7 +487,7 @@ python evaluate_ttt.py \
 ```
 TinyRecursiveModels/
 ├── models/recursive_reasoning/
-│   ├── trm_titans.py      # TRM-Titans v6 모델 (메인)
+│   ├── trm_titans.py      # TRM-Titans v7 모델 (메인)
 │   ├── trm.py             # 원본 TRM
 │   └── hrm.py             # HRM (비교용)
 ├── pretrain.py            # 학습 스크립트
