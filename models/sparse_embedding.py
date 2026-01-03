@@ -25,12 +25,13 @@ class CastedSparseEmbedding(nn.Module):
         # Local embedding IDs, not persistent
         self.local_ids = nn.Buffer(torch.zeros(batch_size, dtype=torch.int32), persistent=False)
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        if not self.training:
-            # Test mode, no gradient
+    def forward(self, inputs: torch.Tensor, test_time_learning: bool = False) -> torch.Tensor:
+        if not self.training and not test_time_learning:
+            # Test mode without adaptation, no gradient needed
             return self.weights[inputs].to(self.cast_to)
-            
-        # Training mode, fill puzzle embedding from weights
+
+        # Training mode OR test-time learning mode
+        # Fill puzzle embedding from weights with gradient support
         with torch.no_grad():
             self.local_weights.copy_(self.weights[inputs])
             self.local_ids.copy_(inputs)

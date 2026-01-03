@@ -602,26 +602,41 @@ class TitansMemory(nn.Module):
         surprise_per_sample = (pred - v.to(pred.dtype)).pow(2).mean(dim=(1, 2))
         surprise = surprise_per_sample.mean()
 
-        # Skip gradient computation if not enabled
-        if not torch.is_grad_enabled():
-            return surprise.detach()
+        # Check if we can use existing gradients (training mode with grad-enabled weights)
+        # This preserves the gradient chain during training for proper backprop
+        can_use_existing_grads = torch.is_grad_enabled() and up_w.requires_grad and down_w.requires_grad
 
-        if not (up_w.requires_grad and down_w.requires_grad):
-            return surprise.detach()
+        if can_use_existing_grads:
+            # Training mode: use existing computation graph
+            # No recompute needed - use the surprise we already computed
+            grads = torch.autograd.grad(
+                surprise,
+                [up_w, down_w],
+                create_graph=create_graph,
+                retain_graph=create_graph
+            )
+        else:
+            # Test-time learning: enable gradients and recompute
+            # This is needed when called inside torch.no_grad() or when weights don't require grad
+            with torch.enable_grad():
+                # Ensure weights require gradients for autograd.grad
+                up_w_grad = up_w.detach().requires_grad_(True) if not up_w.requires_grad else up_w
+                down_w_grad = down_w.detach().requires_grad_(True) if not down_w.requires_grad else down_w
 
-        # Compute gradients for memory update
-        # When create_graph=True:
-        #   - retain_graph=True: Keep graph for backprop through surprise to mem_lr/mem_decay
-        #   - create_graph=True: Allow second-order gradients
-        # When create_graph=False:
-        #   - retain_graph=False: Free graph immediately for memory efficiency
-        #   - create_graph=False: No second-order gradients
-        grads = torch.autograd.grad(
-            surprise,
-            [up_w, down_w],
-            create_graph=create_graph,
-            retain_graph=create_graph  # Keep graph when we need gradients to flow
-        )
+                # Recompute forward for gradient
+                h_grad = F.silu(torch.einsum('bld,bhd->blh', k.to(up_w_grad.dtype), up_w_grad))
+                pred_grad = torch.einsum('blh,boh->blo', h_grad, down_w_grad)
+                surprise_grad = (pred_grad - v.to(pred_grad.dtype)).pow(2).mean()
+
+                grads = torch.autograd.grad(
+                    surprise_grad,
+                    [up_w_grad, down_w_grad],
+                    create_graph=False,  # No need for higher-order gradients in test time
+                    retain_graph=False
+                )
+            # Update references for weight update below
+            up_w, down_w = up_w_grad, down_w_grad
+
         grad_up, grad_down = grads
 
         # Gradient clipping for stability
@@ -1489,12 +1504,23 @@ class TRM_Titans_Inner(nn.Module):
         """
         self.L_level.reset_memory_for_samples(reset_mask)
 
-    def _input_embeddings(self, input: torch.Tensor, puzzle_identifiers: torch.Tensor):
-        """Create input embeddings with puzzle context."""
+    def _input_embeddings(self, input: torch.Tensor, puzzle_identifiers: torch.Tensor, update_memory: bool = False):
+        """Create input embeddings with puzzle context.
+
+        Args:
+            input: Token IDs tensor [B, L]
+            puzzle_identifiers: Puzzle identifier tensor [B]
+            update_memory: If True (during test-time learning), enables gradient
+                          flow through puzzle embeddings for optimizer updates.
+        """
         embedding = self.embed_tokens(input.to(torch.int32))
 
         if self.config.puzzle_emb_ndim > 0:
-            puzzle_embedding = self.puzzle_emb(puzzle_identifiers)
+            # Enable test_time_learning mode when:
+            # 1. Not in training mode (eval mode)
+            # 2. Memory updates are requested (test-time adaptation)
+            test_time_learning = (not self.training) and update_memory
+            puzzle_embedding = self.puzzle_emb(puzzle_identifiers, test_time_learning=test_time_learning)
 
             pad_count = self.puzzle_emb_len * self.config.hidden_size - puzzle_embedding.shape[-1]
             if pad_count > 0:
@@ -1592,7 +1618,7 @@ class TRM_Titans_Inner(nn.Module):
         )
 
         # Input encoding
-        input_embeddings = self._input_embeddings(batch["inputs"], batch["puzzle_identifiers"])
+        input_embeddings = self._input_embeddings(batch["inputs"], batch["puzzle_identifiers"], update_memory=update_memory)
 
         total_surprise = torch.tensor(0.0, device=device, dtype=torch.float32)
         should_create_graph = create_graph and self.training
