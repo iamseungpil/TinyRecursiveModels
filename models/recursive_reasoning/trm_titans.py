@@ -1,120 +1,102 @@
 """
-TRM-Titans v5: Bidirectional Strategy Memory with Unified Surprise Learning
+TRM-Titans v6: Original TRM z_H/z_L Structure with Titans Memory
 
-This module implements the TRM-Titans v5 architecture with bidirectional information
-flow between memory_H and l_state, matching the original TRM's z_H <-> z_L design.
+This module implements the TRM-Titans v6 architecture that restores the original
+TRM's z_H <-> z_L bidirectional structure while adding Titans-style memory to
+layer blocks.
 
-=== TRM-TITANS V5 CORE DESIGN ===
+=== TRM-TITANS V6 CORE DESIGN ===
 
-1. Bidirectional Information Flow (like original TRM):
-   - memory_H -> l_state: Strategy retrieval guides latent reasoning
-   - l_state -> memory_H: memory_H learns from l_state evolution via SURPRISE
-   - This mirrors original TRM's z_H <-> z_L bidirectional structure
+1. Original TRM z_H/z_L Structure Restored:
+   - z_H and z_L are TENSORS (not MLP-based memory_H)
+   - z_H = L_level(z_H, z_L) - H-level state passes through FULL L_level (Attn + MLP)
+   - z_L = L_level(z_L, z_H + input) - L-level state also passes through FULL L_level
 
-2. Unified Learning via SURPRISE:
-   - ALL memories (memory_H + layer memories) learn via surprise-based updates
-   - NO backprop to memory weights (detached before lm_head)
-   - Consistent learning mechanism across all memory components
+2. Key Fix from v5:
+   - v5 PROBLEM: memory_H = TitansMemory (MLP only, no Attention)
+   - v5 PROBLEM: h_state = memory_H(l_state) was MLP-only, not Attn + MLP
+   - v6 FIX: z_H passes through L_level.forward() (Attention + MLP), just like z_L
+   - This matches original TRM where both z_H and z_L use the SAME L_level
 
-3. l_state: Latent Reasoning (CoCoNut-like)
-   - Evolves through L_cycles via attention
-   - Uses h_state as guidance/context
-   - Continuous thought process
+3. Titans Memory at Block Level:
+   - Each TRM_Titans_Block has TitansAttention with implicit memory
+   - Memory learns via surprise-based updates during forward pass
+   - Integration strategies (MAG/MAC/MAL) are plug-and-play
 
-4. Output from h_state (strategy -> answer)
-   - Like original TRM where output comes from z_H
-   - h_state = memory_H(l_state) provides strategy representation
-   - LM head produces answer from DETACHED h_state (no backprop to memory_H)
+4. State Storage:
+   - z_H, z_L stored in TRM_Titans_InnerCarry (like original TRM)
+   - Layer memory weights stored in TitansMemory modules
+   - Both persist across ACT steps
 
-=== KEY DIFFERENCES FROM V4 ===
-| v4 Design                      | v5 Design                       |
+=== KEY DIFFERENCES FROM V5 ===
+| v5 Design                      | v6 Design                       |
 |--------------------------------|---------------------------------|
-| memory_H via BACKPROP          | memory_H via SURPRISE           |
-| h_state -> lm_head (gradient)  | h_state.detach() -> lm_head     |
-| memory_H templates trainable   | memory_H templates FROZEN       |
-| Unidirectional (H -> L)        | Bidirectional (H <-> L)         |
+| memory_H = TitansMemory (MLP)  | z_H = L_level(z_H, z_L) (Attn+MLP)|
+| h_state = memory_H(l_state)    | z_H evolves via full L_level    |
+| Carry: _device_placeholder     | Carry: z_H, z_L tensors         |
+| memory_H.update() for H-level  | z_H = L_level.forward() for H   |
 
 === ORIGINAL TRM STRUCTURE (Reference) ===
 ```python
-# From trm.py: z_H and z_L interact bidirectionally
+# From trm.py: z_H and z_L interact bidirectionally via SAME L_level
 for _H_step in range(H_cycles-1):
     for _L_step in range(L_cycles):
         z_L = L_level(z_L, z_H + input_embeddings)  # L uses H
-    z_H = L_level(z_H, z_L)  # H uses L (bidirectional!)
+    z_H = L_level(z_H, z_L)  # H uses L (FULL L_level: Attn + MLP!)
 ```
 
-v5 implements this bidirectional pattern with memory:
+v6 implements this EXACT pattern with Titans memory at block level:
 ```python
 for _H_step in range(H_cycles - 1):
-    l_state_before = l_state.clone()
-    h_state = memory_H(l_state)  # Strategy retrieval
-
     for _L_step in range(L_cycles):
-        l_state = L_level.attention_forward(l_state, h_state + input)
-
-    # Bidirectional: memory_H learns from l_state change
-    memory_H.update(k=l_state_before, v=l_state)  # SURPRISE-based!
+        z_L = L_level.forward(z_L, z_H + input_embeddings)  # Attn + MLP
+    z_H = L_level.forward(z_H, z_L)  # Attn + MLP (SAME as z_L!)
 ```
 
-=== NOTE ON BIDIRECTIONAL SEMANTICS ===
-
-Original TRM vs TRM-Titans v5:
-- Original TRM: z_H = L_level(z_H, z_L) - STATE tensor directly evolves
-- TRM-Titans v5: memory_H.update(l_before, l_after) - WEIGHTS learn transformation
-
-Similar concept: Both allow high-level state to influence and be influenced by low-level state
-Key difference: v5 uses WEIGHT updates (via surprise), not STATE updates (via forward pass)
-
-In original TRM, z_H is a tensor that gets transformed. In v5, memory_H is a module whose
-weights encode the "strategy" and evolve through surprise-based gradient descent.
-
 === TITANS CONCEPTS (ADAPTED) ===
-1. Implicit State: All memories store patterns in weights
-2. Strategy Memory: memory_H stores slow strategic knowledge
-3. K->V Mapping: All memories learn input->output associations via surprise
-4. Integration Strategies (plug-and-play for layer memories):
+1. Implicit State: Block-level memories store patterns in weights
+2. K->V Mapping: Memories learn input->output associations via surprise
+3. Integration Strategies (plug-and-play for layer memories):
    - MAG (Memory as Gate): Confidence-based mixing
    - MAC (Memory as Context): Memory as attention KV context
    - MAL (Memory as Layer): Sequential processing
 
 === ARCHITECTURE ===
-- Only L_level exists (H_layers config is ignored)
-- L_level.attention_forward(): Fast l_state updates (L_cycles per H_cycle)
-- memory_H (TitansMemory): Strategy retrieval + bidirectional learning
+- Only L_level exists (H_layers config is ignored, like original TRM)
+- L_level.forward(): Full block processing (Attention + MLP)
 - H_cycles: Number of high-level reasoning cycles
 - L_cycles: Number of low-level computation cycles per H_cycle
+- z_H, z_L: State tensors stored in carry (like original TRM)
 
-=== LEARNING DESIGN (v5) ===
+=== LEARNING DESIGN (v6) ===
 
 1. LM Loss:
-   - Optimizes non-memory parameters (lm_head, attention, MLP, embeddings)
-   - memory_H output is DETACHED before lm_head
-   - Gradients do NOT flow to memory_H templates
+   - Optimizes all trainable parameters (lm_head, attention, MLP, embeddings)
+   - z_H passes through full L_level, so gradients flow normally
 
-2. ALL Memory Learning (during forward pass):
-   - Both layer memories AND memory_H update via surprise-based gradient descent
+2. Layer Memory Learning (during forward pass):
+   - Layer memories update via surprise-based gradient descent
    - Uses: M_t = (1 - alpha) * M_{t-1} - eta * grad(surprise)
-   - memory_H learns: "how l_state evolves" (k=l_before, v=l_after)
    - Layer memories learn: "how attention transforms input"
 
 3. Surprise Loss:
-   - Includes BOTH layer memory surprise AND memory_H surprise
+   - Includes layer memory surprise only (no memory_H in v6)
    - Monitored for logging
 
 4. Template Freezing:
-   - ALL memory templates (memory_H + layer) should be frozen
+   - Layer memory templates should be frozen
    - Use model.freeze_memory_templates() before training
 
 Usage:
     # During training
     model = TRM_Titans(config)
-    model.freeze_memory_templates()  # Freeze ALL memory templates (v5)
+    model.freeze_memory_templates()  # Freeze layer memory templates
     loss_head = TRM_Titans_ACTLossHead(model, loss_type)
     # ... training loop ...
 
     # During test-time adaptation
     ttt = TRM_Titans_TestTime(model)
-    ttt.test_time_adapt(demo_pairs)  # ALL memories adapt automatically
+    ttt.test_time_adapt(demo_pairs)  # Layer memories adapt automatically
     predictions = ttt.predict(test_input)
 """
 
@@ -1282,15 +1264,14 @@ class TRM_Titans_Config(BaseModel):
     """
     Configuration for TRM-Titans model.
 
-    TRM-Titans v5 Architecture: Bidirectional Strategy Memory + Unified Surprise Learning
-    - h_state = memory_H(l_state): Strategy retrieval from memory
-    - l_state evolves through L_cycles via attention (CoCoNut-like)
-    - memory_H learns via SURPRISE (bidirectional: learns l_state evolution)
+    TRM-Titans v6 Architecture: Original TRM z_H/z_L Structure + Titans Memory
+    - z_H, z_L are TENSORS stored in carry (like original TRM)
+    - z_H = L_level.forward(z_H, z_L): H-level passes through FULL L_level (Attn + MLP)
+    - z_L = L_level.forward(z_L, z_H + input): L-level also passes through FULL L_level
     - Layer memories learn via SURPRISE (pattern learning)
-    - Output from h_state.detach() (no backprop to memory_H)
+    - Output from z_H (like original TRM)
 
     Integration types (MAG/MAC/MAL) are plug-and-play for LAYER memories.
-    memory_H uses simple forward pass + bidirectional surprise learning.
     """
     batch_size: int
     seq_len: int
@@ -1359,21 +1340,19 @@ class TRM_Titans_Config(BaseModel):
 
 
 # =============================================================================
-# TRM-Titans Carry (NO z_H, z_L - Memory weights ARE the state)
+# TRM-Titans Carry (z_H, z_L like original TRM)
 # =============================================================================
 
 @dataclass
 class TRM_Titans_InnerCarry:
     """
-    Inner carry for TRM-Titans.
+    Inner carry for TRM-Titans v6.
 
-    CRITICAL: NO z_H, z_L tensors!
-    The memory weights in TitansMemory modules ARE the implicit state.
-    This carry only tracks minimal information needed for ACT.
+    v6 restores original TRM structure with z_H and z_L tensors.
+    Layer memory weights in TitansMemory modules provide additional implicit state.
     """
-    # Placeholder tensor for shape/device consistency
-    # The actual state is in the TitansMemory modules
-    _device_placeholder: torch.Tensor
+    z_H: torch.Tensor  # [B, L, D] - High-level state
+    z_L: torch.Tensor  # [B, L, D] - Low-level state
 
 
 @dataclass
@@ -1391,40 +1370,36 @@ class TRM_Titans_Carry:
 
 class TRM_Titans_Inner(nn.Module):
     """
-    Inner model for TRM-Titans v5.
+    Inner model for TRM-Titans v6.
 
-    TRM-Titans v5 Architecture: Bidirectional Strategy Memory with Unified Surprise Learning
-    - h_state = memory_H(l_state): Strategy retrieval from memory
-    - l_state evolves through L_cycles via attention (CoCoNut-like)
-    - memory_H learns via SURPRISE (bidirectional: learns from l_state evolution)
-    - Layer memories learn via SURPRISE (unchanged)
-    - Output from h_state.detach() (no backprop to memory_H)
+    TRM-Titans v6 Architecture: Original TRM z_H/z_L Structure + Titans Memory
+    - z_H and z_L are TENSORS stored in carry (like original TRM)
+    - z_H = L_level.forward(z_H, z_L): H passes through FULL L_level (Attn + MLP)
+    - z_L = L_level.forward(z_L, z_H + input): L passes through FULL L_level
+    - Layer memories learn via SURPRISE during forward pass
+    - Output from z_H (like original TRM)
 
     Key components:
-    - L_level: Reasoning module with attention_forward()
-    - memory_H: TitansMemory with bidirectional learning (surprise-based)
-    - H_init, L_init: Learnable initial states
+    - L_level: Reasoning module with forward() (full Attn + MLP block)
+    - H_init, L_init: Learnable initial states (like original TRM)
 
-    Forward loop structure (like original TRM's z_H <-> z_L):
+    Forward loop structure (EXACTLY like original TRM):
         For each H_cycle:
-            1. Save l_state_before = l_state.clone()
-            2. Strategy retrieval: h_state = memory_H(l_state)
-            3. L_cycles of latent reasoning:
-               l_state = L_level.attention_forward(l_state, h_state + input)
-            4. Bidirectional update: memory_H.update(k=l_state_before, v=l_state)
-        Final strategy retrieval: h_state = memory_H(l_state)
-        Output from h_state.detach() (NO backprop to memory_H!)
+            For each L_cycle:
+                z_L = L_level.forward(z_L, z_H + input_embeddings)
+            z_H = L_level.forward(z_H, z_L)
+        Output from z_H
 
-    Key Design Principles (v5):
-    - memory_H learns via SURPRISE, not backprop
-    - Bidirectional: memory_H learns "how l_state evolves"
-    - h_state is DETACHED before output (no gradients to memory_H)
-    - ALL memories learn via surprise (unified learning mechanism)
+    Key Design Principles (v6):
+    - z_H and z_L are tensors, not memory modules
+    - z_H passes through FULL L_level (Attn + MLP), not just MLP
+    - Layer memories learn via surprise during forward pass
+    - Matches original TRM bidirectional structure exactly
 
     Properties:
-    - NO z_H, z_L tensors in carry (layer state is in memory weights)
+    - z_H, z_L tensors in carry (like original TRM)
     - H_layers config is ignored (like original TRM)
-    - Integration types (MAG/MAC/MAL) are plug-and-play at attention layer level
+    - Integration types (MAG/MAC/MAL) are plug-and-play at block level
     """
 
     def __init__(self, config: TRM_Titans_Config) -> None:
@@ -1475,20 +1450,15 @@ class TRM_Titans_Inner(nn.Module):
             )
 
         # L_level: Single reasoning module (like original TRM)
-        # Layer memories inside each block serve as implicit state (replacing z_H, z_L)
+        # v6: Layer memories inside each block provide implicit state
+        # z_H and z_L are tensors stored in carry, like original TRM
         self.L_level = TRM_Titans_ReasoningModule(
             layers=[TRM_Titans_Block(self.config) for _ in range(self.config.L_layers)]
         )
 
-        # Global H-level memory (replaces z_H, provides h_state)
-        self.memory_H = TitansMemory(
-            input_dim=self.config.hidden_size,
-            hidden_dim=self.config.hidden_size * self.config.memory_hidden_mult,
-            output_dim=self.config.hidden_size,
-            dtype=self.forward_dtype
-        )
+        # v6: NO memory_H - z_H passes through L_level.forward() like original TRM
 
-        # Learnable initial states (can be loaded from TRM checkpoint)
+        # Learnable initial states (like original TRM)
         self.H_init = nn.Parameter(torch.zeros(self.config.hidden_size))
         self.L_init = nn.Parameter(torch.zeros(self.config.hidden_size))
 
@@ -1501,33 +1471,22 @@ class TRM_Titans_Inner(nn.Module):
             self.q_head.weight.zero_()
             self.q_head.bias.fill_(-5)
 
-    def reset_memory_H(self, batch_size: int, device: torch.device = None):
-        """
-        Reset global H-level memory to template state.
-
-        v5 Design: memory_H uses per-batch _current_weights for surprise learning.
-        This resets to fresh template weights.
-        """
-        self.memory_H.reset(batch_size=batch_size, device=device)
-
     def reset_all_memory(self, batch_size: int, device: torch.device = None):
         """
-        Reset all memory states (layer memories AND memory_H).
+        Reset all layer memory states.
 
-        v5 Design: All memories use per-batch weights for surprise learning.
-        This resets all memories to their template states.
+        v6 Design: Layer memories use per-batch weights for surprise learning.
+        z_H and z_L are tensors in carry, reset via reset_carry().
         """
-        self.memory_H.reset(batch_size=batch_size, device=device)
         self.L_level.reset_memory(batch_size=batch_size, device=device)
 
     def reset_memory_for_samples(self, reset_mask: torch.Tensor):
         """
-        Selectively reset memory for specific samples (all memories).
+        Selectively reset layer memory for specific samples.
 
-        v5 Design: All memories use per-batch weights for surprise learning.
-        This selectively resets both memory_H and layer memories.
+        v6 Design: Layer memories use per-batch weights for surprise learning.
+        z_H and z_L are tensors in carry, reset via reset_carry().
         """
-        self.memory_H.reset_for_samples(reset_mask)
         self.L_level.reset_memory_for_samples(reset_mask)
 
     def _input_embeddings(self, input: torch.Tensor, puzzle_identifiers: torch.Tensor):
@@ -1552,11 +1511,37 @@ class TRM_Titans_Inner(nn.Module):
         return self.embed_scale * embedding
 
     def empty_carry(self, batch_size: int, device: torch.device = None):
-        """Create empty carry (minimal, as state is in memory weights)."""
+        """
+        Create empty carry with z_H and z_L tensors (like original TRM).
+
+        v6 Design: z_H and z_L are tensors stored in carry.
+        They will be initialized via reset_carry() before first use.
+        """
         if device is None:
             device = self.lm_head.weight.device
+        # Always include puzzle_emb_len for consistency with original TRM
+        # (original TRM: seq_len + self.puzzle_emb_len)
+        seq_len = self.config.seq_len + self.puzzle_emb_len
         return TRM_Titans_InnerCarry(
-            _device_placeholder=torch.empty(1, device=device, dtype=self.forward_dtype)
+            z_H=torch.empty(batch_size, seq_len, self.config.hidden_size, dtype=self.forward_dtype, device=device),
+            z_L=torch.empty(batch_size, seq_len, self.config.hidden_size, dtype=self.forward_dtype, device=device),
+        )
+
+    def reset_carry(self, reset_flag: torch.Tensor, carry: TRM_Titans_InnerCarry):
+        """
+        Reset z_H and z_L for samples where reset_flag is True (like original TRM).
+
+        v6 Design: Uses H_init and L_init to initialize z_H and z_L tensors.
+        Also resets layer memories for the flagged samples.
+        """
+        # Reset layer memories for flagged samples
+        self.reset_memory_for_samples(reset_flag)
+
+        # Reset z_H and z_L tensors (like original TRM)
+        # Ensure H_init and L_init are on same device as carry for multi-GPU compatibility
+        return TRM_Titans_InnerCarry(
+            z_H=torch.where(reset_flag.view(-1, 1, 1), self.H_init.to(carry.z_H.device), carry.z_H),
+            z_L=torch.where(reset_flag.view(-1, 1, 1), self.L_init.to(carry.z_L.device), carry.z_L),
         )
 
     def forward(
@@ -1567,42 +1552,38 @@ class TRM_Titans_Inner(nn.Module):
         create_graph: bool = False
     ) -> Tuple[TRM_Titans_InnerCarry, torch.Tensor, Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """
-        Forward pass using TRM-Titans v5 architecture.
+        Forward pass using TRM-Titans v6 architecture.
 
-        TRM-Titans v5 Core Design: Bidirectional Strategy Memory + Unified Surprise Learning
-            - h_state = memory_H(l_state): Strategy retrieval from memory
-            - l_state evolves through L_cycles via attention (CoCoNut-like)
-            - memory_H learns via SURPRISE (bidirectional: learns l_state evolution)
+        TRM-Titans v6 Core Design: Original TRM z_H/z_L Structure + Titans Memory
+            - z_H and z_L are TENSORS from carry (like original TRM)
+            - z_H = L_level.forward(z_H, z_L): H passes through FULL L_level (Attn + MLP)
+            - z_L = L_level.forward(z_L, z_H + input): L passes through FULL L_level
             - Layer memories learn via SURPRISE during forward pass
-            - Output from h_state.detach() (NO backprop to memory_H!)
+            - Output from z_H (like original TRM)
 
-        Architecture (like original TRM's z_H <-> z_L):
+        Architecture (EXACTLY like original TRM):
             For each H_cycle:
-                1. l_state_before = l_state.clone()
-                2. Strategy retrieval: h_state = memory_H(l_state)
-                3. L_cycles of latent reasoning:
-                   l_state = L_level.attention_forward(l_state, h_state + input)
-                4. Bidirectional: memory_H.update(k=l_state_before, v=l_state)
-            Final strategy retrieval: h_state = memory_H(l_state)
-            Output from h_state.detach() (NO gradients to memory_H!)
+                For each L_cycle:
+                    z_L = L_level.forward(z_L, z_H + input_embeddings)
+                z_H = L_level.forward(z_H, z_L)
+            Output from z_H
 
-        Key design principles (v5):
-        - ALL memories learn via SURPRISE (unified mechanism)
-        - Bidirectional: memory_H learns "how l_state evolves"
-        - h_state is DETACHED before output (no backprop to memory_H)
-        - memory_H templates have requires_grad=False
+        Key design principles (v6):
+        - z_H and z_L are tensors (not memory modules)
+        - z_H passes through FULL L_level (Attn + MLP), not just MLP
+        - Layer memories learn via surprise during forward pass
+        - Matches original TRM bidirectional structure exactly
 
         Returns:
-            new_carry: Updated carry (minimal)
-            output: LM logits (from h_state.detach() - memory_H output)
+            new_carry: Updated carry with z_H, z_L
+            output: LM logits (from z_H, like original TRM)
             (q_halt_logits, q_continue_logits): Halting logits
-            total_surprise: Sum of ALL memory surprises (layer + memory_H)
+            total_surprise: Sum of layer memory surprises
         """
         batch_size = batch["inputs"].shape[0]
-        seq_len = batch["inputs"].shape[1]
         device = batch["inputs"].device
 
-        # Validate batch size (empty batches will cause memory update failures)
+        # Validate batch size
         if batch_size == 0:
             raise ValueError("TRM_Titans: Cannot process empty batch (batch_size=0)")
 
@@ -1616,122 +1597,79 @@ class TRM_Titans_Inner(nn.Module):
         total_surprise = torch.tensor(0.0, device=device, dtype=torch.float32)
         should_create_graph = create_graph and self.training
 
-        # Initialize ALL memory states if needed (v5: both memory_H and layer memories)
-        # All memories use per-batch weights for surprise-based updates
-        memory_H_needs_reset = (
-            self.memory_H._current_up_weight is None or
-            self.memory_H._batch_size != batch_size
-        )
+        # Initialize layer memory states if needed
         l_level_needs_reset = any(
             layer.self_attn.memory._current_up_weight is None or
             layer.self_attn.memory._batch_size != batch_size
             for layer in self.L_level.layers
         )
-
-        if memory_H_needs_reset:
-            self.memory_H.reset(batch_size=batch_size, device=device)
         if l_level_needs_reset:
             self.L_level.reset_memory(batch_size=batch_size, device=device)
 
-        # Initialize l_state from L_init + input_embeddings (latent reasoning state)
-        # Note: input_embeddings shape is [B, actual_seq_len, D] where actual_seq_len
-        # includes puzzle_emb_len ONLY if puzzle_emb_ndim > 0
-        l_state = self.L_init.view(1, 1, -1) + input_embeddings
-        actual_seq_len = input_embeddings.shape[1]
+        # Get z_H, z_L from carry (like original TRM)
+        z_H, z_L = carry.z_H, carry.z_L
 
-        # H_cycles-1 without grad (INTENTIONAL for efficiency)
-        # This matches original TRM design where only final cycle has gradients.
-        # Memory weights are still updated but without backprop tracking.
-        # The final H_cycle with gradients provides sufficient learning signal.
-        #
-        # NOTE: Only final H_cycle surprise is accumulated into total_surprise.
-        # Previous H_cycles run without grad for efficiency - their memory updates
-        # still occur but surprise values are not tracked for monitoring.
-        # This is intentional: the final H_cycle surprise provides representative
-        # signal for logging while avoiding computational overhead.
+        # H_cycles-1 without grad (matches original TRM design)
+        # Only final cycle has gradients for efficiency.
+        # Layer memory weights are still updated but without backprop tracking.
         with torch.no_grad():
             for _H_step in range(self.config.H_cycles - 1):
-                # 1. Save l_state before evolution (for bidirectional memory_H update)
-                l_state_before = l_state.clone()
-
-                # 2. Strategy retrieval: h_state from memory_H
-                # memory_H encodes "solving strategies" - retrieved based on current l_state
-                # v5: Uses per-batch _current_weights (not templates)
-                h_state = self.memory_H(l_state)
-
-                # 3. L_cycles: Latent reasoning with h_state guidance
-                # l_state evolves through attention, using h_state as context
+                # L_cycles: z_L evolves using z_H + input as context
                 for _L_step in range(self.config.L_cycles):
-                    l_injection = h_state + input_embeddings
-                    l_state, surprise = self.L_level.attention_forward(
-                        l_state, l_injection,
+                    z_L, surprise = self.L_level.forward(
+                        z_L, z_H + input_embeddings,
                         update_memory=update_memory,
                         create_graph=False,
                         **seq_info
                     )
-
-                # 4. Bidirectional: memory_H learns from l_state evolution
-                # K=l_state_before, V=l_state: memory_H learns "how l_state changes"
-                # This mirrors original TRM's z_H = L_level(z_H, z_L) bidirectional update
-                if update_memory:
-                    self.memory_H.update(k=l_state_before, v=l_state, create_graph=False)
+                # z_H evolves using z_L as context (FULL L_level: Attn + MLP)
+                z_H, surprise = self.L_level.forward(
+                    z_H, z_L,
+                    update_memory=update_memory,
+                    create_graph=False,
+                    **seq_info
+                )
 
         # Final H_cycle with grad
-        # 1. Save l_state before evolution
-        l_state_before = l_state.clone()
-
-        # 2. Strategy retrieval (final)
-        # v5: Uses per-batch _current_weights (not templates)
-        h_state = self.memory_H(l_state)
-
-        # 3. L_cycles: Latent reasoning with gradient tracking
+        # L_cycles: z_L evolves with gradient tracking
         for _L_step in range(self.config.L_cycles):
-            l_injection = h_state + input_embeddings
-            l_state, surprise = self.L_level.attention_forward(
-                l_state, l_injection,
+            z_L, surprise = self.L_level.forward(
+                z_L, z_H + input_embeddings,
                 update_memory=update_memory,
                 create_graph=should_create_graph,
                 **seq_info
             )
             total_surprise = total_surprise + surprise
 
-        # 4. Bidirectional: Final memory_H update with gradient tracking
-        if update_memory:
-            memory_H_surprise = self.memory_H.update(
-                k=l_state_before, v=l_state, create_graph=should_create_graph
-            )
-            total_surprise = total_surprise + memory_H_surprise
-
-        # 5. Final strategy retrieval for output (DETACHED to prevent backprop)
-        # v5 design: memory_H learns via SURPRISE ONLY, not through LM loss
-        # Detaching here ensures h_state gradients don't flow back to memory_H weights
-        h_state = self.memory_H(l_state).detach()
+        # z_H evolves using z_L (FULL L_level: Attn + MLP) with gradient tracking
+        z_H, surprise = self.L_level.forward(
+            z_H, z_L,
+            update_memory=update_memory,
+            create_graph=should_create_graph,
+            **seq_info
+        )
+        total_surprise = total_surprise + surprise
 
         # Synchronize all GPUs after memory updates before final output computation
-        # This prevents NCCL timeout from GPU desync during distributed training
         _sync_if_distributed()
 
         # Normalize surprise by the number of surprise terms accumulated
-        # v5: Includes BOTH layer memory surprise AND memory_H surprise
-        #
-        # Surprise counting for the FINAL H_cycle only (previous cycles run without grad):
-        # - L_cycles calls to L_level.attention_forward: each returns SUM of L_layers surprises
-        # - 1 memory_H.update() call
-        # Total: L_cycles * L_layers + 1 (memory_H)
+        # Final H_cycle: L_cycles calls for z_L + 1 call for z_H
+        # Each L_level.forward returns sum of L_layers surprises
         n_L_layers = len(self.L_level.layers)
-        num_surprise_terms = self.config.L_cycles * n_L_layers + 1  # +1 for memory_H
+        num_surprise_terms = (self.config.L_cycles + 1) * n_L_layers
         total_surprise = total_surprise / max(num_surprise_terms, 1)
 
-        # OUTPUT FROM h_state (already detached at line 1708)
-        # v5: h_state was DETACHED above to prevent backprop to memory_H
-        # memory_H learns via SURPRISE only, not through LM loss
-        # LM head transforms strategy to answer logits
-        output = self.lm_head(h_state)[:, self.puzzle_emb_len:]
-        q_logits = self.q_head(h_state[:, 0]).to(torch.float32)
+        # OUTPUT FROM z_H (like original TRM)
+        # Only skip puzzle_emb positions if puzzle embeddings are actually used
+        actual_puzzle_emb_len = self.puzzle_emb_len if self.config.puzzle_emb_ndim > 0 else 0
+        output = self.lm_head(z_H)[:, actual_puzzle_emb_len:]
+        q_logits = self.q_head(z_H[:, 0]).to(torch.float32)
 
-        # Create carry (only the placeholder - layer state is in memory weights)
+        # Create new carry with detached z_H, z_L (like original TRM)
         new_carry = TRM_Titans_InnerCarry(
-            _device_placeholder=torch.empty(1, device=device, dtype=self.forward_dtype)
+            z_H=z_H.detach(),
+            z_L=z_L.detach()
         )
 
         return new_carry, output, (q_logits[..., 0], q_logits[..., 1]), total_surprise
@@ -1743,32 +1681,30 @@ class TRM_Titans_Inner(nn.Module):
 
 class TRM_Titans(nn.Module):
     """
-    TRM-Titans v5 with ACT (Adaptive Computation Time) wrapper.
+    TRM-Titans v6 with ACT (Adaptive Computation Time) wrapper.
 
-    TRM-Titans v5 Core Design: Bidirectional Strategy Memory + Unified Surprise Learning
-    - h_state = memory_H(l_state): Strategy retrieval from memory
-    - l_state evolves through L_cycles via attention (CoCoNut-like)
-    - memory_H learns via SURPRISE (bidirectional: learns l_state evolution)
+    TRM-Titans v6 Core Design: Original TRM z_H/z_L Structure + Titans Memory
+    - z_H, z_L are TENSORS stored in carry (like original TRM)
+    - z_H = L_level.forward(z_H, z_L): H passes through FULL L_level (Attn + MLP)
+    - z_L = L_level.forward(z_L, z_H + input): L passes through FULL L_level
     - Layer memories learn via SURPRISE (pattern learning)
-    - Output from h_state.detach() (NO backprop to memory_H!)
+    - Output from z_H (like original TRM)
 
     Architecture:
     - Only L_level exists (H_layers is ignored, like original TRM)
-    - L_level.attention_forward(): Fast l_state updates (L_cycles per H_cycle)
-    - memory_H: TitansMemory with bidirectional learning (surprise-based)
+    - L_level.forward(): Full block processing (Attn + MLP)
     - Integration types (MAG/MAC/MAL) are plug-and-play via config (for layer memories)
 
-    Memory Design (v5):
-    - ALL memory templates are FROZEN (requires_grad=False)
-    - ALL memories learn via SURPRISE during forward pass
-    - h_state is DETACHED before output (no backprop to memory_H)
+    Memory Design (v6):
+    - Layer memory templates can be FROZEN (requires_grad=False)
+    - Layer memories learn via SURPRISE during forward pass
     - _current_weights adapt during forward pass via surprise
 
-    Key v5 Design Principles:
-    - Unified learning: ALL memories learn via surprise (not backprop)
-    - Bidirectional: memory_H learns "how l_state evolves" (like TRM's z_H <-> z_L)
-    - No gradient flow to memory templates
-    - Call freeze_memory_templates() before training
+    Key v6 Design Principles:
+    - z_H and z_L are tensors, like original TRM
+    - z_H passes through FULL L_level (Attn + MLP), not just MLP
+    - Layer memories learn via surprise
+    - Call freeze_memory_templates() before training if desired
     """
 
     def __init__(self, config_dict: dict):
@@ -1783,62 +1719,25 @@ class TRM_Titans(nn.Module):
             return None
         return self.inner.puzzle_emb
 
-    @property
-    def memory_H(self):
-        """Access global H-level memory."""
-        return self.inner.memory_H
-
-    def reset_memory_H(self, batch_size: int = None, device: torch.device = None):
-        """Reset global H-level memory."""
-        self.inner.reset_memory_H(batch_size=batch_size, device=device)
-
-    def freeze_layer_memory_templates(self):
-        """
-        Freeze only layer memory template weights (NOT memory_H).
-
-        NOTE: For v5 design, use freeze_memory_templates() instead to freeze
-        ALL memory templates (including memory_H).
-
-        This method is kept for backward compatibility with v4 experiments.
-        The layer _current_weights (runtime state) are NOT affected and
-        continue to adapt during forward pass via surprise.
-
-        Memory parameters frozen:
-        - *.self_attn.memory.template_up/down (layer memories)
-        - *.self_attn.memory.mem_lr, mem_decay (layer memory hyperparameters)
-
-        NOT frozen:
-        - *.memory_H.* (global strategy memory)
-        """
-        for name, param in self.named_parameters():
-            is_layer_memory = (
-                '.self_attn.memory.' in name
-            )
-            if is_layer_memory:
-                param.requires_grad = False
-
     def freeze_memory_templates(self):
         """
-        Freeze ALL memory template weights (v5 design - RECOMMENDED).
+        Freeze layer memory template weights.
 
-        TRM-Titans v5 Design:
-        - ALL memories learn via SURPRISE during forward pass
-        - ALL memory templates should NOT receive gradients from optimizer
-        - h_state is detached before output, so no backprop anyway
+        TRM-Titans v6 Design:
+        - Layer memories learn via SURPRISE during forward pass
+        - Layer memory templates should NOT receive gradients from optimizer
 
-        Call this method before training to enforce v5 design.
+        Call this method before training.
         The _current_weights (runtime state) are NOT affected and
         continue to adapt during forward pass via surprise.
 
         Memory parameters frozen:
         - *.self_attn.memory.template_up/down (layer memories)
-        - *.memory_H.* (global H-level memory)
         - *.mem_lr, *.mem_decay (memory hyperparameters)
         """
         for name, param in self.named_parameters():
             is_memory = (
                 '.self_attn.memory.' in name or
-                '.memory_H.' in name or
                 '.mem_lr' in name or
                 '.mem_decay' in name
             )
@@ -1847,40 +1746,18 @@ class TRM_Titans(nn.Module):
 
     def unfreeze_memory_templates(self):
         """
-        Unfreeze all memory template weights (for meta-learning or fine-tuning).
+        Unfreeze layer memory template weights (for meta-learning or fine-tuning).
 
-        This reverses freeze_memory_templates() and allows ALL memory templates
+        This reverses freeze_memory_templates() and allows layer memory templates
         to receive gradients from the optimizer.
-
-        WARNING: In v5, h_state is detached before output, so memory_H won't
-        receive gradients from LM loss anyway. Use this only for special cases
-        like direct meta-learning on memory templates.
         """
         for name, param in self.named_parameters():
             is_memory = (
                 '.self_attn.memory.' in name or
-                '.memory_H.' in name or
                 '.mem_lr' in name or
                 '.mem_decay' in name
             )
             if is_memory:
-                param.requires_grad = True
-
-    def unfreeze_layer_memory_templates(self):
-        """
-        Unfreeze only layer memory template weights (NOT memory_H).
-
-        This reverses freeze_layer_memory_templates() and allows layer memory
-        templates to receive gradients from the optimizer.
-
-        NOTE: For v5 design, layer memories learn via surprise during forward
-        pass, not through optimizer gradients.
-        """
-        for name, param in self.named_parameters():
-            is_layer_memory = (
-                '.self_attn.memory.' in name
-            )
-            if is_layer_memory:
                 param.requires_grad = True
 
     def reset_all_memory(self, batch_size: int = None, device: torch.device = None):
@@ -1912,13 +1789,12 @@ class TRM_Titans(nn.Module):
         """
         Forward pass with ACT.
 
-        Memory reset for halted samples happens here before processing.
+        v6 Design: Uses reset_carry to reset z_H, z_L AND layer memories for halted samples.
         """
-        # Reset memory for halted samples (new puzzle)
-        # NOTE: Always call reset_memory_for_samples to ensure all GPUs execute
-        # the same code path. The mask arithmetic inside handles empty masks.
+        # Reset carry (z_H, z_L) and layer memories for halted samples (new puzzle)
+        # NOTE: Always call to ensure all GPUs execute the same code path.
         # This prevents NCCL timeout from asymmetric collective operations.
-        self.inner.reset_memory_for_samples(carry.halted)
+        new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry)
 
         # Update data for new puzzles
         new_steps = torch.where(carry.halted, 0, carry.steps)
@@ -1929,7 +1805,7 @@ class TRM_Titans(nn.Module):
 
         # Forward inner model
         new_inner_carry, logits, (q_halt_logits, q_continue_logits), surprise = self.inner(
-            carry.inner_carry, new_current_data,
+            new_inner_carry, new_current_data,
             update_memory=update_memory,
             create_graph=create_graph
         )
@@ -1969,10 +1845,6 @@ class TRM_Titans(nn.Module):
                                    torch.maximum(next_q_halt_logits, next_q_continue_logits))
                     )
 
-        # Reset memory for samples that just halted
-        # NOTE: Always call to maintain GPU synchronization (see note above)
-        self.inner.reset_memory_for_samples(halted)
-
         return TRM_Titans_Carry(new_inner_carry, new_steps, halted, new_current_data), outputs
 
 
@@ -1989,11 +1861,11 @@ def load_from_trm_checkpoint(
     """
     Load compatible weights from a pretrained TRM checkpoint.
 
-    This enables transfer learning from TRM to TRM-Titans:
+    This enables transfer learning from TRM to TRM-Titans v6:
     - Attention weights (qkv_proj, o_proj) are directly compatible
     - MLP weights are compatible if expansion factor matches
-    - H_init from TRM initializes memory_H pattern
-    - L_init from TRM initializes l_state starting point
+    - H_init from TRM initializes z_H state
+    - L_init from TRM initializes z_L state
 
     Args:
         model: TRM_Titans model to load weights into
@@ -2034,8 +1906,8 @@ def load_from_trm_checkpoint(
 
         # Special handling for H_init and L_init
         if clean_key == 'inner.H_init':
-            # Use H_init to initialize memory_H template
-            # H_init is [hidden_size], need to use it for memory initialization
+            # Use H_init to initialize z_H state
+            # H_init is [hidden_size], broadcasted to [B, L, D] in reset_carry
             if 'inner.H_init' in model_state:
                 new_state['inner.H_init'] = trm_value
                 loaded_keys.append(f'{trm_key} -> inner.H_init')
@@ -2093,18 +1965,17 @@ def load_from_trm_checkpoint(
 
 class TRM_Titans_ACTLossHead(nn.Module):
     """
-    ACT Loss Head for TRM-Titans v5 with unified surprise learning.
+    ACT Loss Head for TRM-Titans v6 with surprise learning for layer memories.
 
-    TRM-Titans v5 Loss Design:
-    - LM loss: Optimizes NON-memory parameters (h_state is detached)
-    - ALL memories learn via SURPRISE during forward pass
-    - Q losses: Optimize non-memory parameters for halting decisions
-    - Surprise loss: Logged for monitoring (includes both layer + memory_H)
+    TRM-Titans v6 Loss Design:
+    - LM loss: Optimizes all trainable parameters (z_H passes through L_level normally)
+    - Layer memories learn via SURPRISE during forward pass
+    - Q losses: Optimize parameters for halting decisions
+    - Surprise loss: Logged for monitoring (layer memories only)
 
     Implementation:
-    - ALL memory templates have requires_grad=False (surprise-based learning)
-    - h_state is detached before output (no backprop to memory_H)
-    - Call model.freeze_memory_templates() before training
+    - Layer memory templates can be frozen (surprise-based learning)
+    - Call model.freeze_memory_templates() before training if desired
     - Surprise loss is NOT included in total_loss (memories learn via forward pass)
     """
 
@@ -2113,27 +1984,25 @@ class TRM_Titans_ACTLossHead(nn.Module):
         self.model = model
         self.loss_fn = self._get_loss_fn(loss_type)
 
-        # Auto-freeze ALL memory templates to enforce v5 design
-        # All memories learn via surprise, not backprop
-        self._enforce_v5_loss_design()
+        # Auto-freeze layer memory templates
+        # Layer memories learn via surprise, not backprop
+        self._enforce_v6_loss_design()
 
-    def _enforce_v5_loss_design(self):
+    def _enforce_v6_loss_design(self):
         """
-        Enforce v5 loss design by freezing ALL memory template parameters.
+        Enforce v6 loss design by freezing layer memory template parameters.
 
-        TRM-Titans v5 design:
-        - ALL memories learn via forward-pass surprise updates (frozen templates)
-        - h_state is detached, so memory_H doesn't receive gradients anyway
-        - This explicitly freezes templates to prevent accidental gradient flow
+        TRM-Titans v6 design:
+        - Layer memories learn via forward-pass surprise updates (frozen templates)
+        - z_H and z_L pass through full L_level (Attn + MLP) normally
 
-        This method ensures ALL memory templates don't receive gradients.
+        This method ensures layer memory templates don't receive gradients.
         """
         # Check if any memory templates are unfrozen
         memory_params_unfrozen = []
         for name, param in self.model.named_parameters():
             is_memory = (
                 '.self_attn.memory.' in name or
-                '.memory_H.' in name or
                 '.mem_lr' in name or
                 '.mem_decay' in name
             )
@@ -2141,26 +2010,25 @@ class TRM_Titans_ACTLossHead(nn.Module):
                 memory_params_unfrozen.append(name)
 
         if memory_params_unfrozen:
-            # Auto-freeze ALL memory templates
+            # Auto-freeze layer memory templates
             if hasattr(self.model, 'freeze_memory_templates'):
                 self.model.freeze_memory_templates()
                 print(
-                    f"[TRM-Titans v5] Auto-frozen {len(memory_params_unfrozen)} memory parameters. "
-                    "ALL memories will learn via forward-pass surprise updates."
+                    f"[TRM-Titans v6] Auto-frozen {len(memory_params_unfrozen)} memory parameters. "
+                    "Layer memories will learn via forward-pass surprise updates."
                 )
             else:
                 # Manual freeze if method doesn't exist
                 for name, param in self.model.named_parameters():
                     is_memory = (
                         '.self_attn.memory.' in name or
-                        '.memory_H.' in name or
                         '.mem_lr' in name or
                         '.mem_decay' in name
                     )
                     if is_memory:
                         param.requires_grad = False
                 print(
-                    f"[TRM-Titans v5] Auto-frozen {len(memory_params_unfrozen)} memory parameters."
+                    f"[TRM-Titans v6] Auto-frozen {len(memory_params_unfrozen)} memory parameters."
                 )
 
     def _get_loss_fn(self, loss_type: str):
@@ -2184,22 +2052,22 @@ class TRM_Titans_ACTLossHead(nn.Module):
         batch: Dict[str, torch.Tensor],
     ):
         """
-        Forward pass with loss computation following TRM-Titans v5 design.
+        Forward pass with loss computation following TRM-Titans v6 design.
 
-        TRM-Titans v5 Loss Design:
-        - LM loss: Optimizes NON-memory parameters (h_state is detached!)
-        - ALL memories learn via SURPRISE during forward pass
-        - Q losses: Optimize non-memory parameters for halting decisions
-        - Surprise includes both layer memory AND memory_H (bidirectional update)
+        TRM-Titans v6 Loss Design:
+        - LM loss: Optimizes all trainable parameters
+        - Layer memories learn via SURPRISE during forward pass
+        - Q losses: Optimize parameters for halting decisions
+        - Surprise includes layer memory only
 
         Gradient Flow:
-        - h_state is DETACHED before output, so NO gradients flow to memory_H
-        - ALL memory templates are frozen (surprise-based learning only)
+        - z_H and z_L pass through L_level.forward() (Attn + MLP) normally
+        - Layer memory templates are frozen (surprise-based learning only)
         - LM loss optimizes: lm_head, attention, MLP, embeddings
 
         Returns:
-            new_carry: Updated carry
-            loss: Total loss (memory parameters don't receive gradients)
+            new_carry: Updated carry with z_H, z_L
+            loss: Total loss (layer memory parameters don't receive gradients)
             metrics: Dict of metrics
             detached_outputs: Outputs for evaluation
             all_halted: Whether all sequences halted
@@ -2239,8 +2107,7 @@ class TRM_Titans_ACTLossHead(nn.Module):
         )
 
         # Surprise loss - this is logged but NOT added to total_loss
-        # v5: ALL memories (layer + memory_H) learn via surprise during forward pass
-        # The surprise value includes BOTH layer memories AND memory_H (bidirectional)
+        # v6: Layer memories learn via surprise during forward pass
         surprise_loss = outputs.get("surprise", torch.tensor(0.0, device=lm_loss.device))
         surprise_weight = self.model.config.surprise_loss_weight
 
@@ -2262,19 +2129,16 @@ class TRM_Titans_ACTLossHead(nn.Module):
 
         # Total loss for backward pass
         # NOTE: surprise_loss is NOT included here
-        # - ALL memories learn via forward pass (memory.update()), not via optimizer
-        # - h_state is DETACHED, so memory_H doesn't receive gradients from LM loss
+        # - Layer memories learn via forward pass (memory.update()), not via optimizer
         #
         # Q losses ARE included because halting decisions benefit from memory state
-        # (the model needs to know when memory is confident to decide when to halt)
         total_loss = lm_loss + 0.5 * (q_halt_loss + q_continue_loss)
 
-        # TRM-Titans v5 Design:
-        # - ALL memory templates have requires_grad=False (surprise-based learning)
-        # - h_state is DETACHED before output (no backprop to memory_H)
+        # TRM-Titans v6 Design:
+        # - Layer memory templates have requires_grad=False (surprise-based learning)
+        # - z_H and z_L pass through L_level.forward() (Attn + MLP) normally
         #
         # This is enforced by freeze_memory_templates() called in __init__.
-        # NO gradients flow to ANY memory parameters.
 
         # Filter outputs for return
         detached_outputs = {k: outputs[k].detach() for k in return_keys if k in outputs}
@@ -2321,17 +2185,12 @@ def softmax_cross_entropy(logits, labels, ignore_index: int = -100, valid_mask=N
 
 class TRM_Titans_TestTime:
     """
-    Utilities for test-time learning following TRM-Titans v5 design.
+    Utilities for test-time learning following TRM-Titans v6 design.
 
-    TRM-Titans v5 Test-Time Adaptation Design:
-    - ALL memories (layer + memory_H): Adapt automatically via surprise-based update
-    - memory_H also adapts (learns l_state evolution patterns)
+    TRM-Titans v6 Test-Time Adaptation Design:
+    - z_H, z_L: State tensors that evolve via L_level.forward() (like original TRM)
+    - Layer memories: Adapt automatically via surprise-based update
     - Puzzle_emb: Optionally trained via optimizer (optional)
-
-    Key Differences from v4:
-    - memory_H now ALSO adapts via surprise (bidirectional learning)
-    - Both layer and memory_H benefit from accumulate_memory setting
-    - Unified learning mechanism for all memories
     """
 
     def __init__(self, model: TRM_Titans, device: torch.device = None):
@@ -2341,10 +2200,10 @@ class TRM_Titans_TestTime:
 
     def _freeze_pretrained(self):
         """
-        Freeze parameters for test-time adaptation following v5 design.
+        Freeze parameters for test-time adaptation following v6 design.
 
-        TRM-Titans v5 Design:
-        - ALL memories adapt via forward-pass surprise update (NOT optimizer)
+        TRM-Titans v6 Design:
+        - Layer memories adapt via forward-pass surprise update (NOT optimizer)
         - Only puzzle_emb uses optimizer.step() (optional)
         - All other parameters are frozen
 
@@ -2352,7 +2211,7 @@ class TRM_Titans_TestTime:
         1. Freezes ALL parameters (requires_grad=False)
         2. Unfreezes only puzzle_emb (requires_grad=True)
 
-        Note: ALL memory _current_weights are still updated during forward
+        Note: Layer memory _current_weights are still updated during forward
         via the Titans update rule, independent of requires_grad.
         """
         # First freeze everything
@@ -2368,22 +2227,21 @@ class TRM_Titans_TestTime:
         """
         Get parameters that are learned via optimizer at test-time.
 
-        Following v5 design, only puzzle_emb is optimized.
-        ALL memories (layer + memory_H) learn during forward pass via memory.update().
+        Following v6 design, only puzzle_emb is optimized.
+        Layer memories learn during forward pass via memory.update().
         """
         return [p for p in self.model.parameters() if p.requires_grad]
 
     def reset_memory(self, batch_size: int = 1):
         """
-        Explicitly reset ALL memories to clean template state.
+        Explicitly reset layer memories to clean template state.
 
-        v5 Design: This resets BOTH layer memories AND memory_H.
-        All memories use per-batch weights that adapt via surprise.
+        v6 Design: This resets layer memories.
+        z_H and z_L are reset via the carry mechanism.
 
         Call this method to:
-        - Reset all memories before adapting to a new puzzle (automatic in test_time_adapt)
-        - Reset all memories between independent predictions
-        - Clear all memories if you want a fresh start
+        - Reset layer memories before adapting to a new puzzle
+        - Reset layer memories between independent predictions
 
         Args:
             batch_size: Batch size for the memory state
@@ -2402,24 +2260,22 @@ class TRM_Titans_TestTime:
         """
         Adapt model to a new puzzle using demo pairs.
 
-        TRM-Titans v5 Test-Time Adaptation:
-        - ALL memories automatically adapt during forward pass via surprise-based update
-        - memory_H also adapts (bidirectional: learns l_state evolution)
+        TRM-Titans v6 Test-Time Adaptation:
+        - z_H, z_L evolve via L_level.forward() (like original TRM)
+        - Layer memories automatically adapt during forward pass via surprise-based update
         - Puzzle_emb optionally trained via optimizer
 
         Memory Accumulation Behavior (accumulate_memory=True, default):
-            - ALL memories are initialized once at the START of each adaptation step
+            - Layer memories are initialized once at the START of each adaptation step
             - All demos within a step share and build upon the same memory state
             - Information from earlier demos is retained and refined by later demos
             - This enables few-shot learning where demos progressively teach the model
 
         Non-accumulating Behavior (accumulate_memory=False):
-            - ALL memories are reset to template weights before EACH demo
+            - Layer memories are reset to template weights before EACH demo
             - Each demo is processed independently with fresh memories
             - No information transfer between demos within a step
             - Useful for independent demo processing
-
-        Note: In v5, memory_H IS affected by accumulate_memory (bidirectional learning).
 
         Args:
             demo_pairs: List of (input, target) demo pairs. Each pair contains:
@@ -2430,7 +2286,7 @@ class TRM_Titans_TestTime:
             puzzle_id: Puzzle identifier for puzzle embedding (should be consistent
                       with predict() calls)
             verbose: Whether to print loss progression
-            accumulate_memory: If True (default), ALL memories accumulate across demos
+            accumulate_memory: If True (default), layer memories accumulate across demos
                               within each step. If False, memories reset before each demo.
 
         Raises:
