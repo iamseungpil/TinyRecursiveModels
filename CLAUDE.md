@@ -163,46 +163,323 @@ output = lm_head(l_state)
 
 ---
 
-### 5. 학습 파이프라인
+### 5. 학습/추론 파이프라인 (4가지 코드 경로)
 
-#### 5.1 Pretraining (`pretrain.py`)
-```python
-# Optimizer 분리
-optimizers = [
-    CastedSparseEmbeddingSignSGD(puzzle_emb),  # Puzzle embedding
-    AdamW(model.parameters())                   # 나머지
-]
+TRM-Titans는 **4가지 코드 경로**를 지원합니다:
 
-# Training loop
-for batch in dataloader:
-    carry, loss, metrics = model(carry, batch, update_memory=True)
-    loss.backward()  # Memory는 forward에서 이미 업데이트됨
-    optimizer.step()
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        TRM-Titans Code Paths                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. Pretraining (pretrain.py)                                               │
+│     └── 대규모 데이터셋으로 모델 사전학습                                      │
+│         • Dual optimizer (SignSGD + AdamW)                                  │
+│         • Memory surprise 업데이트 (forward)                                 │
+│         • Attention/MLP backprop 학습                                       │
+│                                                                             │
+│  2. Standard Evaluation (evaluators/arc.py)                                 │
+│     └── 학습 중 주기적 평가 (pretrain.py에서 호출)                            │
+│         • 모든 augmentation에 대해 예측                                      │
+│         • Voting으로 최종 예측 선택                                          │
+│         • pass@k 정확도 계산                                                │
+│                                                                             │
+│  3. Test-Time Training (TRM_Titans_TestTime in trm_titans.py)               │
+│     └── 퍼즐별 적응 (demo examples로 memory 업데이트)                        │
+│         • Memory만 업데이트 (model weights frozen)                          │
+│         • Surprise 기반 학습                                                │
+│         • Accumulate 또는 Reset 옵션                                        │
+│                                                                             │
+│  4. TTT Evaluation (evaluate_ttt.py)                                        │
+│     └── TTT 성능 독립 평가 스크립트                                          │
+│         • 체크포인트 로드 → TTT 적응 → 예측 → pass@k 계산                    │
+│         • submission.json 생성 (Kaggle 제출용)                              │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**학습 대상:**
-| 컴포넌트 | 학습 방식 |
-|----------|----------|
-| Puzzle Embedding | SignSGD (sparse) |
-| Attention (Q,K,V,O) | AdamW (backprop) |
-| MLP (SwiGLU) | AdamW (backprop) |
-| Memory template | Frozen |
-| Memory current weights | Surprise (forward) |
-| mem_lr, mem_decay | Frozen |
+---
 
-#### 5.2 Test-Time Training (`evaluate_ttt.py`)
+#### 5.1 Pretraining (`pretrain.py`)
+
+대규모 ARC 데이터셋으로 모델을 사전학습합니다.
+
+**핵심 구조:**
 ```python
-ttt = TRM_Titans_TestTime(model)
+# 1. Dual Optimizer 설정
+optimizers = [
+    CastedSparseEmbeddingSignSGD_Distributed(  # Puzzle embedding
+        model.puzzle_emb.buffers(),
+        lr=puzzle_emb_lr,  # 1e-2 (높은 lr)
+        weight_decay=0.1
+    ),
+    AdamW(                                      # 나머지 모델 파라미터
+        model.parameters(),
+        lr=lr,  # 1e-4 (일반 lr)
+        weight_decay=0.1,
+        betas=(0.9, 0.95)
+    )
+]
 
-for puzzle in puzzles:
-    # 1. Memory reset
-    ttt.reset_memory()
+# 2. Training Loop
+carry = None  # Carry는 배치 간 persist (Memory 상태 유지)
+for epoch in epochs:
+    for batch in train_loader:
+        # Init carry if None
+        if carry is None:
+            carry = model.initial_carry(batch)
 
-    # 2. Demo pairs로 적응
-    ttt.test_time_adapt(demo_pairs, n_steps=10, lr=0.01)
+        # Forward (Memory surprise 업데이트 포함)
+        carry, loss, metrics, _, _ = model(carry, batch)
 
-    # 3. Test 예측
-    predictions = ttt.predict(test_input)
+        # Backward (Attention, MLP만 학습)
+        loss.backward()
+
+        # Optimizer step
+        for optim in optimizers:
+            optim.step()
+            optim.zero_grad()
+```
+
+**학습 대상 정리:**
+| 컴포넌트 | 학습 방식 | Optimizer | 비고 |
+|----------|----------|-----------|------|
+| Puzzle Embedding | Gradient | SignSGD (sparse) | lr=1e-2, task별 embedding |
+| Attention (Q,K,V,O) | Backprop | AdamW | lr=1e-4 |
+| MLP (SwiGLU) | Backprop | AdamW | lr=1e-4 |
+| Memory template | **Frozen** | - | 초기화 후 변경 없음 |
+| Memory current weights | **Surprise** | - | Forward에서 업데이트 |
+| mem_lr, mem_decay | **Frozen** | - | 고정 하이퍼파라미터 |
+
+**Carry 관리:**
+- `carry`는 `(z_H, z_L)` 텐서를 포함
+- 배치 간 **persist** (epoch 전체에서 유지)
+- Memory weights (`_current_up/down_weight`)는 모델 내부에 저장
+
+---
+
+#### 5.2 Standard Evaluation (`evaluators/arc.py`)
+
+`pretrain.py`에서 주기적으로 호출되는 평가 로직입니다.
+
+**평가 흐름:**
+```python
+# 1. Evaluator 초기화
+evaluator = ARC(data_path, eval_metadata, pass_Ks=(1, 2, 5, 10, 100, 1000))
+
+# 2. 각 배치 처리
+for batch in eval_loader:
+    with torch.no_grad():
+        carry = model.initial_carry(batch)  # 각 배치마다 새 carry
+
+        # ACT loop (all_finish될 때까지)
+        while True:
+            carry, loss, metrics, preds, all_finish = model(carry, batch)
+            if all_finish:
+                break
+
+        # 예측 수집
+        evaluator.update_batch(batch, preds)
+
+# 3. 결과 집계 (voting)
+results = evaluator.result(save_path, rank, world_size, group)
+```
+
+**Voting 메커니즘:**
+```python
+# 여러 augmentation의 예측을 voting으로 집계
+for input_hash, predictions in all_predictions.items():
+    # q_halt_logits sigmoid를 confidence로 사용
+    p_map = {}
+    for pred_hash, q_value in predictions:
+        p_map[pred_hash] = (count, avg_confidence)
+
+    # Confidence 순으로 정렬
+    sorted_preds = sorted(p_map.items(), key=confidence, reverse=True)
+
+    # pass@k 계산
+    for k in pass_Ks:
+        if label_hash in top_k_preds:
+            correct[k] += 1
+```
+
+**출력:**
+- `ARC/pass@1`, `ARC/pass@2`, ... `ARC/pass@1000`
+- `submission.json` (Kaggle 제출용)
+
+---
+
+#### 5.3 Test-Time Training (`TRM_Titans_TestTime`)
+
+퍼즐별로 demo examples로 적응하는 TTT 래퍼 클래스입니다.
+
+**클래스 구조 (`trm_titans.py`):**
+```python
+class TRM_Titans_TestTime:
+    def __init__(self, model: TRM_Titans, device: torch.device):
+        self.model = model
+        self.device = device
+
+    def reset_all_memory(self, batch_size: int = 1):
+        """모든 Memory를 template 상태로 리셋"""
+        self.model.reset_all_memory(batch_size, self.device)
+
+    def test_time_adapt(
+        self,
+        demo_pairs: List[Tuple[Tensor, Tensor]],  # (input, label) pairs
+        n_steps: int = 10,
+        lr: float = 0.01,
+        puzzle_id: int = 0,
+        accumulate_memory: bool = True,
+        verbose: bool = False
+    ):
+        """Demo examples로 Memory 적응"""
+        # 1. Memory 리셋 (accumulate=False일 때)
+        if not accumulate_memory:
+            self.reset_all_memory()
+
+        # 2. 각 demo pair로 Memory 업데이트
+        for step in range(n_steps):
+            for inp, label in demo_pairs:
+                # Forward (surprise 계산 및 Memory 업데이트)
+                carry = self.model.initial_carry(batch)
+                carry, loss, metrics, preds, _ = self.model(
+                    carry, batch, update_memory=True
+                )
+
+    def predict(
+        self,
+        test_input: Tensor,
+        update_during_prediction: bool = False,
+        puzzle_id: int = 0,
+        reset_memory: bool = False
+    ) -> Tensor:
+        """적응된 Memory로 예측"""
+        if reset_memory:
+            self.reset_all_memory()
+
+        with torch.no_grad():
+            carry = self.model.initial_carry(batch)
+            carry, _, _, preds, _ = self.model(
+                carry, batch, update_memory=update_during_prediction
+            )
+
+        return preds["preds"]
+```
+
+**Memory Accumulation 옵션:**
+| 옵션 | 동작 | 사용 상황 |
+|------|------|----------|
+| `accumulate_memory=True` | Demo 간 Memory 누적 | 관련 패턴이 많을 때 |
+| `accumulate_memory=False` | 각 demo마다 리셋 | 독립적인 패턴일 때 |
+
+---
+
+#### 5.4 TTT Evaluation (`evaluate_ttt.py`)
+
+TTT 성능을 독립적으로 평가하는 스크립트입니다.
+
+**실행 흐름:**
+```python
+# 1. 모델 및 체크포인트 로드
+model = TRM_Titans(config)
+load_checkpoint(model, checkpoint_path)
+model.freeze_memory_templates()  # Template freeze
+
+# 2. TTT 래퍼 생성
+ttt = TRM_Titans_TestTime(model, device)
+
+# 3. 각 퍼즐 평가
+for puzzle_name, puzzle_data in puzzles.items():
+    # Demo pairs 준비
+    demo_pairs = [
+        (inp_tokens, label_tokens)
+        for example in puzzle_data["train"]
+    ]
+
+    # TTT 적응
+    ttt.test_time_adapt(
+        demo_pairs=demo_pairs,
+        n_steps=10,      # 적응 스텝 수
+        lr=0.01,         # 적응 learning rate
+        puzzle_id=idx,
+        accumulate_memory=True
+    )
+
+    # Test 예측
+    for test_example in puzzle_data["test"]:
+        pred = ttt.predict(
+            test_input,
+            update_during_prediction=False,  # 예측 시 Memory 고정
+            reset_memory=False               # 적응된 Memory 유지
+        )
+        results.append(pred)
+
+# 4. Pass@k 계산 및 저장
+metrics = compute_pass_at_k(results, labels, pass_ks=(1, 2))
+save_submission(submission_path)
+```
+
+**CLI 옵션:**
+```bash
+python evaluate_ttt.py \
+    --checkpoint /path/to/checkpoint \
+    --data_path data/arc-aug-1000 \
+    --ttt_steps 10 \              # 적응 스텝 수
+    --ttt_lr 0.01 \               # 적응 lr
+    --output_path outputs/ttt_eval \
+    --device cuda:0 \
+    --verbose \
+    --no_accumulate_memory        # Memory 누적 비활성화 (선택)
+```
+
+**출력 파일:**
+- `submission.json`: Kaggle 제출용 (attempt_1, attempt_2)
+- `metrics.json`: pass@1, pass@2 정확도
+- `eval_config.json`: 평가 설정 기록
+
+---
+
+#### 5.5 코드 경로별 Memory 동작 비교
+
+| 코드 경로 | Memory 리셋 시점 | Memory 업데이트 | 용도 |
+|-----------|-----------------|----------------|------|
+| **Pretraining** | 없음 (persist) | Surprise (forward) | 패턴 학습 |
+| **Std Evaluation** | 각 배치 | No (no_grad) | 성능 측정 |
+| **TTT Adapt** | 각 퍼즐 시작 | Surprise (forward) | 퍼즐 적응 |
+| **TTT Predict** | 선택적 | 선택적 | 예측 생성 |
+
+---
+
+#### 5.6 학습 컴포넌트별 역할 요약
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     Learning Component Roles                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Puzzle Embedding (SignSGD)                                                 │
+│  └── 각 퍼즐 ID별 task-specific representation 학습                         │
+│      • Sparse update (해당 퍼즐 ID만 업데이트)                               │
+│      • 높은 lr (1e-2) 사용                                                  │
+│                                                                             │
+│  Attention + MLP (AdamW)                                                    │
+│  └── 일반적인 패턴 인식 및 변환 학습                                         │
+│      • Q, K, V, O projection + SwiGLU MLP                                   │
+│      • 표준 lr (1e-4) 사용                                                  │
+│                                                                             │
+│  Memory Template (Frozen)                                                   │
+│  └── 초기 memory state 정의                                                │
+│      • reset_all_memory() 시 이 값으로 복원                                 │
+│      • 학습되지 않음                                                        │
+│                                                                             │
+│  Memory Current Weights (Surprise)                                          │
+│  └── 런타임 패턴 저장                                                       │
+│      • Forward pass에서 자동 업데이트                                       │
+│      • M_t = (1-α)*M_{t-1} - η*∇(||M(k)-v||²)                              │
+│      • Backprop 그래프에 포함되지 않음                                       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
