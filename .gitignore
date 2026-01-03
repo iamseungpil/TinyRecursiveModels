@@ -26,3 +26,15 @@ build/
 
 # Misc
 .DS_Store
+
+# Training outputs
+wandb/
+outputs/
+logs/
+*.log
+
+# Data (large files)
+data/
+
+# Checkpoints
+checkpoints/
