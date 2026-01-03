@@ -1,6 +1,6 @@
 # TRM-Titans Fast Training Config
 # Target: ~12 hours on 8x A100 GPUs (eval every ~3 hours)
-# Key: MLP memory replaces z_H, z_L (Titans-style implicit state)
+# Key: TRM z_H/z_L structure with Titans-style layer memories
 
 defaults:
   - arch: trm_titans

@@ -23,7 +23,7 @@ import os
 import sys
 import json
 import argparse
-from typing import Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional
 from dataclasses import dataclass
 
 import torch
@@ -333,7 +333,7 @@ def evaluate_all_puzzles(
     model: TRM_Titans,
     puzzles: Dict[str, dict],
     config: EvalConfig
-) -> Dict[str, any]:
+) -> Dict[str, Any]:
     """
     Evaluate all puzzles and compute metrics.
 

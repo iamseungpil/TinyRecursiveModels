@@ -1550,9 +1550,9 @@ class TRM_Titans_Inner(nn.Module):
         """
         if device is None:
             device = self.lm_head.weight.device
-        # Always include puzzle_emb_len for consistency with original TRM
-        # (original TRM: seq_len + self.puzzle_emb_len)
-        seq_len = self.config.seq_len + self.puzzle_emb_len
+        # Include puzzle_emb_len only when puzzle embeddings are used
+        actual_puzzle_emb_len = self.puzzle_emb_len if self.config.puzzle_emb_ndim > 0 else 0
+        seq_len = self.config.seq_len + actual_puzzle_emb_len
         return TRM_Titans_InnerCarry(
             z_H=torch.empty(batch_size, seq_len, self.config.hidden_size, dtype=self.forward_dtype, device=device),
             z_L=torch.empty(batch_size, seq_len, self.config.hidden_size, dtype=self.forward_dtype, device=device),
