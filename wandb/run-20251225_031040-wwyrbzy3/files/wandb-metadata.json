@@ -1,0 +1,25 @@
+{
+  "os":  "Linux-5.15.0-141-generic-x86_64-with-glibc2.35",
+  "python":  "CPython 3.10.19",
+  "startedAt":  "2025-12-24T18:10:40.029573Z",
+  "args":  [
+    "arch=trm_nm",
+    "global_batch_size=32",
+    "epochs=3",
+    "eval_interval=1",
+    "+checkpoint_path=/data/TinyRecursiveModels/checkpoints/trm_nm_test",
+    "+project_name=trm_nm_test"
+  ],
+  "program":  "/home/ubuntu/TinyRecursiveModels/pretrain.py",
+  "codePath":  "pretrain.py",
+  "codePathLocal":  "pretrain.py",
+  "git":  {
+    "remote":  "https://github.com/iamseungpil/TinyRecursiveModels.git",
+    "commit":  "c8069f50a6bf54a2572189dc341b3f9bcb412fed"
+  },
+  "email":  "joungju257@gmail.com",
+  "root":  "/home/ubuntu/TinyRecursiveModels",
+  "host":  "gpu-1",
+  "executable":  "/data/miniforge3/envs/memgen_arc/bin/python",
+  "writerId":  "0rcccrfv0x94wx2yh692spka7hgcwby3"
+}

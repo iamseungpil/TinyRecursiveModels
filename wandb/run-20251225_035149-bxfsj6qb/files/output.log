@@ -1,0 +1,5 @@
+[Rank 0, World Size 3]: Epoch 0
+TRAIN
+/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_inductor/compile_fx.py:312: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. Consider setting `torch.set_float32_matmul_precision('high')` for better performance.
+  warnings.warn(
+  0%|          | 1298/1603279 [1:26:13<1745:38:38,  3.92s/it]

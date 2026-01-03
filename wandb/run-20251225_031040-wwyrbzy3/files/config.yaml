@@ -1,0 +1,118 @@
+_wandb:
+    value:
+        cli_version: 0.23.1
+        code_path: source-trm_nm_test-pretrain.py
+        e:
+            0rcccrfv0x94wx2yh692spka7hgcwby3:
+                args:
+                    - arch=trm_nm
+                    - global_batch_size=32
+                    - epochs=3
+                    - eval_interval=1
+                    - +checkpoint_path=/data/TinyRecursiveModels/checkpoints/trm_nm_test
+                    - +project_name=trm_nm_test
+                codePath: pretrain.py
+                codePathLocal: pretrain.py
+                email: joungju257@gmail.com
+                executable: /data/miniforge3/envs/memgen_arc/bin/python
+                git:
+                    commit: c8069f50a6bf54a2572189dc341b3f9bcb412fed
+                    remote: https://github.com/iamseungpil/TinyRecursiveModels.git
+                host: gpu-1
+                os: Linux-5.15.0-141-generic-x86_64-with-glibc2.35
+                program: /home/ubuntu/TinyRecursiveModels/pretrain.py
+                python: CPython 3.10.19
+                root: /home/ubuntu/TinyRecursiveModels
+                startedAt: "2025-12-24T18:10:40.029573Z"
+                writerId: 0rcccrfv0x94wx2yh692spka7hgcwby3
+        m: []
+        python_version: 3.10.19
+        t:
+            "1":
+                - 1
+                - 50
+            "2":
+                - 1
+                - 50
+            "3":
+                - 13
+                - 16
+                - 61
+            "4": 3.10.19
+            "5": 0.23.1
+            "12": 0.23.1
+            "13": linux-x86_64
+arch:
+    value:
+        H_cycles: 3
+        H_layers: 0
+        L_cycles: 6
+        L_layers: 2
+        expansion: 4
+        forward_dtype: bfloat16
+        halt_exploration_prob: 0.1
+        halt_max_steps: 16
+        hidden_size: 512
+        loss:
+            loss_type: stablemax_cross_entropy
+            name: recursive_reasoning.trm_nm@TRM_NM_ACTLossHead
+        memory_hidden_mult: 4
+        name: recursive_reasoning.trm_nm@TRM_NM
+        no_ACT_continue: true
+        num_heads: 8
+        pos_encodings: rope
+        puzzle_emb_len: 16
+        puzzle_emb_ndim: 512
+        surprise_loss_weight: 0.1
+beta1:
+    value: 0.9
+beta2:
+    value: 0.95
+checkpoint_every_eval:
+    value: true
+checkpoint_path:
+    value: /data/TinyRecursiveModels/checkpoints/trm_nm_test
+data_paths:
+    value:
+        - data/arc-aug-1000
+data_paths_test:
+    value: []
+ema:
+    value: false
+ema_rate:
+    value: 0.999
+epochs:
+    value: 3
+eval_interval:
+    value: 1
+eval_save_outputs:
+    value: []
+evaluators:
+    value:
+        - name: arc@ARC
+freeze_weights:
+    value: false
+global_batch_size:
+    value: 32
+load_checkpoint:
+    value: null
+lr:
+    value: 0.0001
+lr_min_ratio:
+    value: 1
+lr_warmup_steps:
+    value: 2000
+min_eval_interval:
+    value: 0
+project_name:
+    value: trm_nm_test
+puzzle_emb_lr:
+    value: 0.01
+puzzle_emb_weight_decay:
+    value: 0.1
+run_name:
+    value: TRM_NM illegal-dodo
+seed:
+    value: 0
+weight_decay:
+    value: 0.1

@@ -1,0 +1,77 @@
+[Rank 0, World Size 1]: Epoch 0
+TRAIN
+/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_inductor/compile_fx.py:312: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. Consider setting `torch.set_float32_matmul_precision('high')` for better performance.
+  warnings.warn(
+ 32%|███▏      | 91/288 [04:19<06:38,  2.02s/it]Error executing job with overrides: ['arch=trm_nm', 'global_batch_size=32', 'epochs=3', 'eval_interval=1', '+checkpoint_path=/data/TinyRecursiveModels/checkpoints/trm_nm_test', '+project_name=trm_nm_test']
+EVALUATE
+Processing batch 1: all
+Traceback (most recent call last):
+  File "/home/ubuntu/TinyRecursiveModels/pretrain.py", line 628, in launch
+    metrics = evaluate(config,
+  File "/home/ubuntu/TinyRecursiveModels/pretrain.py", line 389, in evaluate
+    carry, loss, metrics, preds, all_finish = train_state.model(
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 414, in __call__
+    return super().__call__(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 832, in compile_wrapper
+    return fn(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 1347, in forward
+    new_carry, outputs = self.model(carry, batch, update_memory=True, create_graph=self.training)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 1104, in forward
+    if carry.halted.any():
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 1105, in torch_dynamo_resume_in_forward_at_1104
+    self.inner.reset_memory_for_samples(carry.halted)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 1116, in torch_dynamo_resume_in_forward_at_1105
+    new_inner_carry, logits, (q_halt_logits, q_continue_logits), surprise = self.inner(
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 1011, in forward
+    z_L, surprise = self.L_level(
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 775, in forward
+    hidden_states, surprise = layer(
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 725, in forward
+    attn_out, surprise = self.self_attn(
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 649, in forward
+    surprise = self.memory.update_memory(hidden_states, attn_output, create_graph=create_graph)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 282, in update_memory
+    def update_memory(self, k: torch.Tensor, v: torch.Tensor,
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 1044, in _fn
+    return fn(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_functorch/aot_autograd.py", line 1130, in forward
+    return compiled_fn(full_args)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 339, in runtime_wrapper
+    all_outs = call_func_at_runtime_with_args(
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_functorch/_aot_autograd/utils.py", line 129, in call_func_at_runtime_with_args
+    out = normalize_as_list(f(args))
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_functorch/_aot_autograd/utils.py", line 103, in g
+    return f(*args)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/autograd/function.py", line 581, in apply
+    return super().apply(*args, **kwargs)  # type: ignore[misc]
+RuntimeError: Inference tensors cannot be saved for backward. Please do not use Tensors created in inference mode in computation tracked by autograd. To work around this, you can make a clone to get a normal tensor and use it in autograd, or use `torch.no_grad()` instead of `torch.inference_mode()`.
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.

@@ -1,0 +1,6 @@
+{"time":"2025-12-29T00:55:37.867353104+09:00","level":"INFO","msg":"stream: starting","core version":"0.22.2"}
+{"time":"2025-12-29T00:55:38.08068285+09:00","level":"INFO","msg":"stream: created new stream","id":"3riav2md"}
+{"time":"2025-12-29T00:55:38.08077392+09:00","level":"INFO","msg":"handler: started","stream_id":"3riav2md"}
+{"time":"2025-12-29T00:55:38.081009269+09:00","level":"INFO","msg":"stream: started","id":"3riav2md"}
+{"time":"2025-12-29T00:55:38.081051548+09:00","level":"INFO","msg":"writer: started","stream_id":"3riav2md"}
+{"time":"2025-12-29T00:55:38.081097363+09:00","level":"INFO","msg":"sender: started","stream_id":"3riav2md"}

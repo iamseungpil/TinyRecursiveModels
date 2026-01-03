@@ -1,0 +1,169 @@
+[Rank 0, World Size 8]: Epoch 0
+TRAIN
+ 25%|██▍       | 509/2052 [18:02<54:01,  2.10s/it]  
+EVALUATE
+Processing batch 1: all
+  Completed inference in 16 steps
+Processing batch 2: all
+  Completed inference in 16 steps
+Processing batch 3: all
+  Completed inference in 16 steps
+Processing batch 4: all
+  Completed inference in 16 steps
+Processing batch 5: all
+  Completed inference in 16 steps
+Processing batch 6: all
+  Completed inference in 16 steps
+Processing batch 7: all
+  Completed inference in 16 steps
+Processing batch 8: all
+  Completed inference in 16 steps
+Processing batch 9: all
+  Completed inference in 16 steps
+Processing batch 10: all
+  Completed inference in 16 steps
+Processing batch 11: all
+  Completed inference in 16 steps
+Processing batch 12: all
+  Completed inference in 16 steps
+Processing batch 13: all
+  Completed inference in 16 steps
+Processing batch 14: all
+  Completed inference in 16 steps
+Processing batch 15: all
+  Completed inference in 16 steps
+Processing batch 16: all
+  Completed inference in 16 steps
+Processing batch 17: all
+  Completed inference in 16 steps
+Processing batch 18: all
+  Completed inference in 16 steps
+Processing batch 19: all
+  Completed inference in 16 steps
+Processing batch 20: all
+  Completed inference in 16 steps
+Processing batch 21: all
+  Completed inference in 16 steps
+Processing batch 22: all
+  Completed inference in 16 steps
+Processing batch 23: all
+  Completed inference in 16 steps
+Processing batch 24: all
+  Completed inference in 16 steps
+Processing batch 25: all
+  Completed inference in 16 steps
+Processing batch 26: all
+  Completed inference in 16 steps
+Processing batch 27: all
+  Completed inference in 16 steps
+Processing batch 28: all
+  Completed inference in 16 steps
+Processing batch 29: all
+  Completed inference in 16 steps
+Processing batch 30: all
+  Completed inference in 16 steps
+Processing batch 31: all
+  Completed inference in 16 steps
+Processing batch 32: all
+  Completed inference in 16 steps
+Processing batch 33: all
+  Completed inference in 16 steps
+Processing batch 34: all
+  Completed inference in 16 steps
+Processing batch 35: all
+  Completed inference in 16 steps
+Processing batch 36: all
+  Completed inference in 16 steps
+Processing batch 37: all
+  Completed inference in 16 steps
+Processing batch 38: all
+  Completed inference in 16 steps
+Processing batch 39: all
+  Completed inference in 16 steps
+Processing batch 40: all
+  Completed inference in 16 steps
+Processing batch 41: all
+  Completed inference in 16 steps
+Processing batch 42: all
+  Completed inference in 16 steps
+Processing batch 43: all
+  Completed inference in 16 steps
+Processing batch 44: all
+  Completed inference in 16 steps
+Processing batch 45: all
+  Completed inference in 16 steps
+Processing batch 46: all
+  Completed inference in 16 steps
+Processing batch 47: all
+  Completed inference in 16 steps
+Processing batch 48: all
+  Completed inference in 16 steps
+Processing batch 49: all
+  Completed inference in 16 steps
+Processing batch 50: all
+  Completed inference in 16 steps
+Processing batch 51: all
+  Completed inference in 16 steps
+Processing batch 52: all
+  Completed inference in 16 steps
+Processing batch 53: all
+  Completed inference in 16 steps
+Processing batch 54: all
+  Completed inference in 16 steps
+Processing batch 55: all
+  Completed inference in 16 steps
+Processing batch 56: all
+  Completed inference in 16 steps
+Processing batch 57: all
+  Completed inference in 16 steps
+Processing batch 58: all
+  Completed inference in 16 steps
+Processing batch 59: all
+  Completed inference in 16 steps
+Processing batch 60: all
+  Completed inference in 16 steps
+Processing batch 61: all
+  Completed inference in 16 steps
+Processing batch 62: all
+  Completed inference in 16 steps
+Processing batch 63: all
+  Completed inference in 16 steps
+Processing batch 64: all
+  Completed inference in 16 steps
+Processing batch 65: all
+  Completed inference in 16 steps
+Processing batch 66: all
+  Completed inference in 16 steps
+Processing batch 67: all
+  Completed inference in 16 steps
+Processing batch 68: all
+  Completed inference in 16 steps
+Processing batch 69: all
+  Completed inference in 16 steps
+Processing batch 70: all
+  Completed inference in 16 steps
+Processing batch 71: all
+  Completed inference in 16 steps
+Processing batch 72: all
+  Completed inference in 16 steps
+Processing batch 73: all
+  Completed inference in 16 steps
+Processing batch 74: all
+  Completed inference in 16 steps
+Processing batch 75: all
+  Completed inference in 16 steps
+Processing batch 76: all
+  Completed inference in 16 steps
+Processing batch 77: all
+  Completed inference in 16 steps
+Processing batch 78: all
+  Completed inference in 16 steps
+Processing batch 79: all
+  Completed inference in 16 steps
+Processing batch 80: all
+  Completed inference in 16 steps
+Processing batch 81: all
+  Completed inference in 16 steps
+Processing batch 82: all
+  Completed inference in 16 steps
+Processing batch 83: all

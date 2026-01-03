@@ -1,0 +1,546 @@
+W1229 17:12:31.404000 3879861 site-packages/torch/distributed/run.py:803] 
+W1229 17:12:31.404000 3879861 site-packages/torch/distributed/run.py:803] *****************************************
+W1229 17:12:31.404000 3879861 site-packages/torch/distributed/run.py:803] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W1229 17:12:31.404000 3879861 site-packages/torch/distributed/run.py:803] *****************************************
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/data/miniforge3/lib/python3.10/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+[W1229 17:12:41.597087984 Utils.hpp:166] Warning: Environment variable NCCL_BLOCKING_WAIT is deprecated; use TORCH_NCCL_BLOCKING_WAIT instead (function operator())
+[W1229 17:12:41.674078288 Utils.hpp:166] Warning: Environment variable NCCL_BLOCKING_WAIT is deprecated; use TORCH_NCCL_BLOCKING_WAIT instead (function operator())
+[W1229 17:12:42.801063278 Utils.hpp:166] Warning: Environment variable NCCL_BLOCKING_WAIT is deprecated; use TORCH_NCCL_BLOCKING_WAIT instead (function operator())
+[W1229 17:12:42.844134445 Utils.hpp:166] Warning: Environment variable NCCL_BLOCKING_WAIT is deprecated; use TORCH_NCCL_BLOCKING_WAIT instead (function operator())
+[W1229 17:12:42.935477542 Utils.hpp:166] Warning: Environment variable NCCL_BLOCKING_WAIT is deprecated; use TORCH_NCCL_BLOCKING_WAIT instead (function operator())
+[W1229 17:12:42.999662610 Utils.hpp:166] Warning: Environment variable NCCL_BLOCKING_WAIT is deprecated; use TORCH_NCCL_BLOCKING_WAIT instead (function operator())
+[W1229 17:12:42.012812029 Utils.hpp:166] Warning: Environment variable NCCL_BLOCKING_WAIT is deprecated; use TORCH_NCCL_BLOCKING_WAIT instead (function operator())
+[W1229 17:12:42.015544407 Utils.hpp:166] Warning: Environment variable NCCL_BLOCKING_WAIT is deprecated; use TORCH_NCCL_BLOCKING_WAIT instead (function operator())
+[Gloo] Rank 2 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 7 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 1 is connected to 7 peer ranks. Expected number of connected peer ranks is : [Gloo] Rank 73
+ is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 0 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 4 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 5 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+[Gloo] Rank 6 is connected to 7 peer ranks. Expected number of connected peer ranks is : 7
+TRM_Titans(
+  (inner): TRM_Titans_Inner(
+    (embed_tokens): CastedEmbedding()
+    (lm_head): CastedLinear()
+    (q_head): CastedLinear()
+    (puzzle_emb): CastedSparseEmbedding()
+    (rotary_emb): RotaryEmbedding()
+    (memory_H): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (memory_L): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (L_level): TRM_Titans_ReasoningModule(
+      (layers): ModuleList(
+        (0-1): 2 x TRM_Titans_Block(
+          (self_attn): TitansAttentionWithMAG(
+            (qkv_proj): CastedLinear()
+            (o_proj): CastedLinear()
+            (memory): TitansMemory(
+              (template_up): Linear(in_features=512, out_features=2048, bias=False)
+              (template_down): Linear(in_features=2048, out_features=512, bias=False)
+            )
+          )
+          (mlp): SwiGLU(
+            (gate_up_proj): CastedLinear()
+            (down_proj): CastedLinear()
+          )
+        )
+      )
+    )
+  )
+)
+TRM_Titans(
+  (inner): TRM_Titans_Inner(
+    (embed_tokens): CastedEmbedding()
+    (lm_head): CastedLinear()
+    (q_head): CastedLinear()
+    (puzzle_emb): CastedSparseEmbedding()
+    (rotary_emb): RotaryEmbedding()
+    (memory_H): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (memory_L): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (L_level): TRM_Titans_ReasoningModule(
+      (layers): ModuleList(
+        (0-1): 2 x TRM_Titans_Block(
+          (self_attn): TitansAttentionWithMAG(
+            (qkv_proj): CastedLinear()
+            (o_proj): CastedLinear()
+            (memory): TitansMemory(
+              (template_up): Linear(in_features=512, out_features=2048, bias=False)
+              (template_down): Linear(in_features=2048, out_features=512, bias=False)
+            )
+          )
+          (mlp): SwiGLU(
+            (gate_up_proj): CastedLinear()
+            (down_proj): CastedLinear()
+          )
+        )
+      )
+    )
+  )
+)
+TRM_Titans(
+  (inner): TRM_Titans_Inner(
+    (embed_tokens): CastedEmbedding()
+    (lm_head): CastedLinear()
+    (q_head): CastedLinear()
+    (puzzle_emb): CastedSparseEmbedding()
+    (rotary_emb): RotaryEmbedding()
+    (memory_H): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (memory_L): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (L_level): TRM_Titans_ReasoningModule(
+      (layers): ModuleList(
+        (0-1): 2 x TRM_Titans_Block(
+          (self_attn): TitansAttentionWithMAG(
+            (qkv_proj): CastedLinear()
+            (o_proj): CastedLinear()
+            (memory): TitansMemory(
+              (template_up): Linear(in_features=512, out_features=2048, bias=False)
+              (template_down): Linear(in_features=2048, out_features=512, bias=False)
+            )
+          )
+          (mlp): SwiGLU(
+            (gate_up_proj): CastedLinear()
+            (down_proj): CastedLinear()
+          )
+        )
+      )
+    )
+  )
+)
+[Rank 3, World Size 8]: Epoch 0[Rank 7, World Size 8]: Epoch 0
+
+TRM_Titans(
+  (inner): TRM_Titans_Inner(
+    (embed_tokens): CastedEmbedding()
+    (lm_head): CastedLinear()
+    (q_head): CastedLinear()
+    (puzzle_emb): CastedSparseEmbedding()
+    (rotary_emb): RotaryEmbedding()
+    (memory_H): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (memory_L): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (L_level): TRM_Titans_ReasoningModule(
+      (layers): ModuleList(
+        (0-1): 2 x TRM_Titans_Block(
+          (self_attn): TitansAttentionWithMAG(
+            (qkv_proj): CastedLinear()
+            (o_proj): CastedLinear()
+            (memory): TitansMemory(
+              (template_up): Linear(in_features=512, out_features=2048, bias=False)
+              (template_down): Linear(in_features=2048, out_features=512, bias=False)
+            )
+          )
+          (mlp): SwiGLU(
+            (gate_up_proj): CastedLinear()
+            (down_proj): CastedLinear()
+          )
+        )
+      )
+    )
+  )
+)TRM_Titans(
+  (inner): TRM_Titans_Inner(
+    (embed_tokens): CastedEmbedding()
+    (lm_head): CastedLinear()
+    (q_head): CastedLinear()
+    (puzzle_emb): CastedSparseEmbedding()
+    (rotary_emb): RotaryEmbedding()
+    (memory_H): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (memory_L): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (L_level): TRM_Titans_ReasoningModule(
+      (layers): ModuleList(
+        (0-1): 2 x TRM_Titans_Block(
+          (self_attn): TitansAttentionWithMAG(
+            (qkv_proj): CastedLinear()
+            (o_proj): CastedLinear()
+            (memory): TitansMemory(
+              (template_up): Linear(in_features=512, out_features=2048, bias=False)
+              (template_down): Linear(in_features=2048, out_features=512, bias=False)
+            )
+          )
+          (mlp): SwiGLU(
+            (gate_up_proj): CastedLinear()
+            (down_proj): CastedLinear()
+          )
+        )
+      )
+    )
+  )
+)
+
+[Rank 6, World Size 8]: Epoch 0
+[Rank 4, World Size 8]: Epoch 0
+TRM_Titans(
+  (inner): TRM_Titans_Inner(
+    (embed_tokens): CastedEmbedding()
+    (lm_head): CastedLinear()
+    (q_head): CastedLinear()
+    (puzzle_emb): CastedSparseEmbedding()
+    (rotary_emb): RotaryEmbedding()
+    (memory_H): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (memory_L): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (L_level): TRM_Titans_ReasoningModule(
+      (layers): ModuleList(
+        (0-1): 2 x TRM_Titans_Block(
+          (self_attn): TitansAttentionWithMAG(
+            (qkv_proj): CastedLinear()
+            (o_proj): CastedLinear()
+            (memory): TitansMemory(
+              (template_up): Linear(in_features=512, out_features=2048, bias=False)
+              (template_down): Linear(in_features=2048, out_features=512, bias=False)
+            )
+          )
+          (mlp): SwiGLU(
+            (gate_up_proj): CastedLinear()
+            (down_proj): CastedLinear()
+          )
+        )
+      )
+    )
+  )
+)
+  0%|          | 0/2052 [00:00<?, ?it/s][Rank 5, World Size 8]: Epoch 0
+TRM_Titans(
+  (inner): TRM_Titans_Inner(
+    (embed_tokens): CastedEmbedding()
+    (lm_head): CastedLinear()
+    (q_head): CastedLinear()
+    (puzzle_emb): CastedSparseEmbedding()
+    (rotary_emb): RotaryEmbedding()
+    (memory_H): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (memory_L): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (L_level): TRM_Titans_ReasoningModule(
+      (layers): ModuleList(
+        (0-1): 2 x TRM_Titans_Block(
+          (self_attn): TitansAttentionWithMAG(
+            (qkv_proj): CastedLinear()
+            (o_proj): CastedLinear()
+            (memory): TitansMemory(
+              (template_up): Linear(in_features=512, out_features=2048, bias=False)
+              (template_down): Linear(in_features=2048, out_features=512, bias=False)
+            )
+          )
+          (mlp): SwiGLU(
+            (gate_up_proj): CastedLinear()
+            (down_proj): CastedLinear()
+          )
+        )
+      )
+    )
+  )
+)
+TRM_Titans(
+  (inner): TRM_Titans_Inner(
+    (embed_tokens): CastedEmbedding()
+    (lm_head): CastedLinear()
+    (q_head): CastedLinear()
+    (puzzle_emb): CastedSparseEmbedding()
+    (rotary_emb): RotaryEmbedding()
+    (memory_H): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (memory_L): TitansMemory(
+      (template_up): Linear(in_features=512, out_features=2048, bias=False)
+      (template_down): Linear(in_features=2048, out_features=512, bias=False)
+    )
+    (L_level): TRM_Titans_ReasoningModule(
+      (layers): ModuleList(
+        (0-1): 2 x TRM_Titans_Block(
+          (self_attn): TitansAttentionWithMAG(
+            (qkv_proj): CastedLinear()
+            (o_proj): CastedLinear()
+            (memory): TitansMemory(
+              (template_up): Linear(in_features=512, out_features=2048, bias=False)
+              (template_down): Linear(in_features=2048, out_features=512, bias=False)
+            )
+          )
+          (mlp): SwiGLU(
+            (gate_up_proj): CastedLinear()
+            (down_proj): CastedLinear()
+          )
+        )
+      )
+    )
+  )
+)
+[Rank 2, World Size 8]: Epoch 0
+[Rank 1, World Size 8]: Epoch 0
+wandb: Currently logged in as: iamseungpil (gistdslab) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run mwdp5hx2
+wandb: Tracking run with wandb version 0.22.2
+wandb: Run data is saved locally in /home/ubuntu/TinyRecursiveModels/wandb/run-20251229_171252-mwdp5hx2
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run trm_titans_fast_v12_12h
+wandb: ⭐️ View project at https://wandb.ai/gistdslab/TRM_Titans_Training
+wandb: 🚀 View run at https://wandb.ai/gistdslab/TRM_Titans_Training/runs/mwdp5hx2
+[Rank 0, World Size 8]: Epoch 0
+TRAIN
+  0%|          | 1/2052 [00:08<5:00:34,  8.79s/it]  0%|          | 2/2052 [00:10<2:46:40,  4.88s/it]  0%|          | 3/2052 [00:13<2:03:38,  3.62s/it]  0%|          | 4/2052 [00:15<1:43:19,  3.03s/it]  0%|          | 5/2052 [00:17<1:31:56,  2.69s/it]  0%|          | 6/2052 [00:19<1:25:05,  2.50s/it]  0%|          | 7/2052 [00:21<1:20:39,  2.37s/it]  0%|          | 8/2052 [00:23<1:17:49,  2.28s/it]  0%|          | 9/2052 [00:25<1:15:53,  2.23s/it]  0%|          | 10/2052 [00:27<1:14:34,  2.19s/it]  1%|          | 11/2052 [00:29<1:13:35,  2.16s/it]  1%|          | 12/2052 [00:32<1:13:01,  2.15s/it]  1%|          | 13/2052 [00:34<1:12:39,  2.14s/it]  1%|          | 14/2052 [00:36<1:12:15,  2.13s/it]  1%|          | 15/2052 [00:38<1:12:00,  2.12s/it]  1%|          | 16/2052 [00:40<1:11:52,  2.12s/it]  1%|          | 17/2052 [00:42<1:11:49,  2.12s/it]  1%|          | 18/2052 [00:44<1:11:41,  2.11s/it]  1%|          | 19/2052 [00:46<1:11:33,  2.11s/it]  1%|          | 20/2052 [00:48<1:11:26,  2.11s/it]  1%|          | 21/2052 [00:50<1:11:22,  2.11s/it]  1%|          | 22/2052 [00:53<1:11:18,  2.11s/it]  1%|          | 23/2052 [00:55<1:11:13,  2.11s/it]  1%|          | 24/2052 [00:57<1:11:07,  2.10s/it]  1%|          | 25/2052 [00:59<1:11:04,  2.10s/it]  1%|▏         | 26/2052 [01:01<1:11:02,  2.10s/it]  1%|▏         | 27/2052 [01:03<1:11:00,  2.10s/it]  1%|▏         | 28/2052 [01:05<1:10:57,  2.10s/it]  1%|▏         | 29/2052 [01:07<1:10:54,  2.10s/it]  1%|▏         | 30/2052 [01:09<1:10:49,  2.10s/it]  2%|▏         | 31/2052 [01:12<1:10:53,  2.10s/it]  2%|▏         | 32/2052 [01:14<1:10:46,  2.10s/it]  2%|▏         | 33/2052 [01:16<1:10:46,  2.10s/it]  2%|▏         | 34/2052 [01:18<1:10:49,  2.11s/it]  2%|▏         | 35/2052 [01:20<1:10:51,  2.11s/it]  2%|▏         | 36/2052 [01:22<1:10:46,  2.11s/it]  2%|▏         | 37/2052 [01:24<1:10:42,  2.11s/it]  2%|▏         | 38/2052 [01:26<1:10:35,  2.10s/it]  2%|▏         | 39/2052 [01:28<1:10:32,  2.10s/it]  2%|▏         | 40/2052 [01:30<1:10:29,  2.10s/it]  2%|▏         | 41/2052 [01:33<1:10:25,  2.10s/it]  2%|▏         | 42/2052 [01:35<1:10:22,  2.10s/it]  2%|▏         | 43/2052 [01:37<1:10:20,  2.10s/it]  2%|▏         | 44/2052 [01:39<1:10:15,  2.10s/it]  2%|▏         | 45/2052 [01:41<1:10:15,  2.10s/it]  2%|▏         | 46/2052 [01:43<1:10:11,  2.10s/it]  2%|▏         | 47/2052 [01:45<1:10:16,  2.10s/it]  2%|▏         | 48/2052 [01:47<1:10:13,  2.10s/it]  2%|▏         | 49/2052 [01:49<1:10:10,  2.10s/it]  2%|▏         | 50/2052 [01:51<1:10:09,  2.10s/it]  2%|▏         | 51/2052 [01:54<1:10:06,  2.10s/it]  3%|▎         | 52/2052 [01:56<1:10:02,  2.10s/it]  3%|▎         | 53/2052 [01:58<1:10:03,  2.10s/it]  3%|▎         | 54/2052 [02:00<1:09:59,  2.10s/it]  3%|▎         | 55/2052 [02:02<1:09:56,  2.10s/it]  3%|▎         | 56/2052 [02:04<1:09:52,  2.10s/it]  3%|▎         | 57/2052 [02:06<1:09:52,  2.10s/it]  3%|▎         | 58/2052 [02:08<1:09:48,  2.10s/it]  3%|▎         | 59/2052 [02:10<1:09:47,  2.10s/it]  3%|▎         | 60/2052 [02:12<1:09:45,  2.10s/it]  3%|▎         | 61/2052 [02:15<1:09:42,  2.10s/it]  3%|▎         | 62/2052 [02:17<1:09:41,  2.10s/it]  3%|▎         | 63/2052 [02:19<1:09:42,  2.10s/it]  3%|▎         | 64/2052 [02:21<1:09:44,  2.10s/it]  3%|▎         | 65/2052 [02:23<1:09:39,  2.10s/it]  3%|▎         | 66/2052 [02:25<1:10:28,  2.13s/it]  3%|▎         | 67/2052 [02:27<1:11:04,  2.15s/it]  3%|▎         | 68/2052 [02:29<1:10:36,  2.14s/it]  3%|▎         | 69/2052 [02:32<1:10:13,  2.13s/it]  3%|▎         | 70/2052 [02:34<1:10:02,  2.12s/it]  3%|▎         | 71/2052 [02:36<1:09:50,  2.12s/it]  4%|▎         | 72/2052 [02:38<1:09:42,  2.11s/it]  4%|▎         | 73/2052 [02:40<1:09:39,  2.11s/it]  4%|▎         | 74/2052 [02:42<1:09:33,  2.11s/it]  4%|▎         | 75/2052 [02:44<1:09:32,  2.11s/it]  4%|▎         | 76/2052 [02:46<1:09:29,  2.11s/it]  4%|▍         | 77/2052 [02:48<1:09:36,  2.11s/it]  4%|▍         | 78/2052 [02:51<1:09:29,  2.11s/it]  4%|▍         | 79/2052 [02:53<1:09:22,  2.11s/it]  4%|▍         | 80/2052 [02:55<1:09:15,  2.11s/it]  4%|▍         | 81/2052 [02:57<1:09:16,  2.11s/it]  4%|▍         | 82/2052 [02:59<1:09:19,  2.11s/it]  4%|▍         | 83/2052 [03:01<1:09:14,  2.11s/it]  4%|▍         | 84/2052 [03:03<1:09:11,  2.11s/it]  4%|▍         | 85/2052 [03:05<1:09:02,  2.11s/it]  4%|▍         | 86/2052 [03:07<1:08:59,  2.11s/it]  4%|▍         | 87/2052 [03:10<1:08:56,  2.10s/it]  4%|▍         | 88/2052 [03:12<1:08:54,  2.10s/it]  4%|▍         | 89/2052 [03:14<1:08:49,  2.10s/it]  4%|▍         | 90/2052 [03:16<1:08:48,  2.10s/it]  4%|▍         | 91/2052 [03:18<1:08:45,  2.10s/it]  4%|▍         | 92/2052 [03:20<1:08:45,  2.10s/it]  5%|▍         | 93/2052 [03:22<1:08:42,  2.10s/it]  5%|▍         | 94/2052 [03:24<1:08:37,  2.10s/it]  5%|▍         | 95/2052 [03:26<1:08:38,  2.10s/it]  5%|▍         | 96/2052 [03:28<1:08:37,  2.10s/it]  5%|▍         | 97/2052 [03:31<1:08:33,  2.10s/it]  5%|▍         | 98/2052 [03:33<1:08:29,  2.10s/it]  5%|▍         | 99/2052 [03:35<1:08:28,  2.10s/it]  5%|▍         | 100/2052 [03:37<1:08:23,  2.10s/it]  5%|▍         | 101/2052 [03:39<1:08:18,  2.10s/it]  5%|▍         | 102/2052 [03:41<1:08:16,  2.10s/it]  5%|▌         | 103/2052 [03:43<1:08:11,  2.10s/it]  5%|▌         | 104/2052 [03:45<1:08:15,  2.10s/it]  5%|▌         | 105/2052 [03:47<1:08:16,  2.10s/it]  5%|▌         | 106/2052 [03:50<1:08:16,  2.11s/it]  5%|▌         | 107/2052 [03:52<1:08:12,  2.10s/it]  5%|▌         | 108/2052 [03:54<1:08:08,  2.10s/it]  5%|▌         | 109/2052 [03:56<1:08:08,  2.10s/it]  5%|▌         | 110/2052 [03:58<1:08:05,  2.10s/it]  5%|▌         | 111/2052 [04:00<1:08:05,  2.10s/it]  5%|▌         | 112/2052 [04:02<1:08:01,  2.10s/it]  6%|▌         | 113/2052 [04:04<1:08:01,  2.10s/it]  6%|▌         | 114/2052 [04:06<1:07:56,  2.10s/it]  6%|▌         | 115/2052 [04:08<1:07:52,  2.10s/it]  6%|▌         | 116/2052 [04:11<1:07:53,  2.10s/it]  6%|▌         | 117/2052 [04:13<1:07:49,  2.10s/it]  6%|▌         | 118/2052 [04:15<1:07:46,  2.10s/it]  6%|▌         | 119/2052 [04:17<1:07:45,  2.10s/it]  6%|▌         | 120/2052 [04:19<1:07:42,  2.10s/it]  6%|▌         | 121/2052 [04:21<1:07:41,  2.10s/it]  6%|▌         | 122/2052 [04:23<1:07:38,  2.10s/it]  6%|▌         | 123/2052 [04:25<1:07:35,  2.10s/it]  6%|▌         | 124/2052 [04:27<1:07:33,  2.10s/it]  6%|▌         | 125/2052 [04:29<1:07:31,  2.10s/it]  6%|▌         | 126/2052 [04:32<1:07:29,  2.10s/it]  6%|▌         | 127/2052 [04:34<1:07:25,  2.10s/it]  6%|▌         | 128/2052 [04:36<1:07:25,  2.10s/it]  6%|▋         | 129/2052 [04:38<1:07:21,  2.10s/it]  6%|▋         | 130/2052 [04:40<1:07:21,  2.10s/it]  6%|▋         | 131/2052 [04:42<1:07:21,  2.10s/it]  6%|▋         | 132/2052 [04:44<1:07:16,  2.10s/it]  6%|▋         | 133/2052 [04:46<1:07:14,  2.10s/it]  7%|▋         | 134/2052 [04:48<1:07:08,  2.10s/it]  7%|▋         | 135/2052 [04:50<1:07:07,  2.10s/it]  7%|▋         | 136/2052 [04:53<1:07:06,  2.10s/it]  7%|▋         | 137/2052 [04:55<1:07:07,  2.10s/it]  7%|▋         | 138/2052 [04:57<1:07:04,  2.10s/it]  7%|▋         | 139/2052 [04:59<1:06:59,  2.10s/it]  7%|▋         | 140/2052 [05:01<1:06:58,  2.10s/it]  7%|▋         | 141/2052 [05:03<1:07:00,  2.10s/it]  7%|▋         | 142/2052 [05:05<1:06:57,  2.10s/it]  7%|▋         | 143/2052 [05:07<1:06:53,  2.10s/it]  7%|▋         | 144/2052 [05:09<1:06:50,  2.10s/it]  7%|▋         | 145/2052 [05:12<1:06:47,  2.10s/it]  7%|▋         | 146/2052 [05:14<1:06:50,  2.10s/it]  7%|▋         | 147/2052 [05:16<1:06:45,  2.10s/it]  7%|▋         | 148/2052 [05:18<1:06:45,  2.10s/it]  7%|▋         | 149/2052 [05:20<1:06:39,  2.10s/it]  7%|▋         | 150/2052 [05:22<1:06:35,  2.10s/it]  7%|▋         | 151/2052 [05:24<1:06:33,  2.10s/it]  7%|▋         | 152/2052 [05:26<1:06:31,  2.10s/it]  7%|▋         | 153/2052 [05:28<1:06:31,  2.10s/it]  8%|▊         | 154/2052 [05:30<1:06:33,  2.10s/it]  8%|▊         | 155/2052 [05:33<1:06:34,  2.11s/it]  8%|▊         | 156/2052 [05:35<1:06:32,  2.11s/it]  8%|▊         | 157/2052 [05:37<1:06:34,  2.11s/it]  8%|▊         | 158/2052 [05:39<1:06:31,  2.11s/it]  8%|▊         | 159/2052 [05:41<1:06:29,  2.11s/it]  8%|▊         | 160/2052 [05:43<1:06:23,  2.11s/it]  8%|▊         | 161/2052 [05:45<1:06:23,  2.11s/it]  8%|▊         | 162/2052 [05:47<1:06:22,  2.11s/it]  8%|▊         | 163/2052 [05:49<1:06:16,  2.10s/it]  8%|▊         | 164/2052 [05:51<1:06:13,  2.10s/it]  8%|▊         | 165/2052 [05:54<1:06:10,  2.10s/it]  8%|▊         | 166/2052 [05:56<1:06:07,  2.10s/it]  8%|▊         | 167/2052 [05:58<1:06:07,  2.10s/it]  8%|▊         | 168/2052 [06:00<1:06:04,  2.10s/it]  8%|▊         | 169/2052 [06:02<1:06:04,  2.11s/it]  8%|▊         | 170/2052 [06:04<1:06:01,  2.10s/it]  8%|▊         | 171/2052 [06:06<1:05:58,  2.10s/it]  8%|▊         | 172/2052 [06:08<1:05:57,  2.11s/it]  8%|▊         | 173/2052 [06:10<1:05:58,  2.11s/it]  8%|▊         | 174/2052 [06:13<1:05:55,  2.11s/it]  9%|▊         | 175/2052 [06:15<1:05:50,  2.10s/it]  9%|▊         | 176/2052 [06:17<1:05:49,  2.11s/it]  9%|▊         | 177/2052 [06:19<1:05:48,  2.11s/it]  9%|▊         | 178/2052 [06:21<1:05:44,  2.10s/it]  9%|▊         | 179/2052 [06:23<1:05:35,  2.10s/it]  9%|▉         | 180/2052 [06:25<1:05:36,  2.10s/it]  9%|▉         | 181/2052 [06:27<1:05:36,  2.10s/it]  9%|▉         | 182/2052 [06:29<1:05:31,  2.10s/it]  9%|▉         | 183/2052 [06:31<1:05:26,  2.10s/it]  9%|▉         | 184/2052 [06:34<1:05:26,  2.10s/it]  9%|▉         | 185/2052 [06:36<1:05:22,  2.10s/it]  9%|▉         | 186/2052 [06:38<1:05:24,  2.10s/it]  9%|▉         | 187/2052 [06:40<1:05:22,  2.10s/it]  9%|▉         | 188/2052 [06:42<1:05:20,  2.10s/it]  9%|▉         | 189/2052 [06:44<1:05:23,  2.11s/it]  9%|▉         | 190/2052 [06:46<1:05:15,  2.10s/it]  9%|▉         | 191/2052 [06:48<1:05:13,  2.10s/it]  9%|▉         | 192/2052 [06:50<1:05:12,  2.10s/it]  9%|▉         | 193/2052 [06:53<1:05:09,  2.10s/it]  9%|▉         | 194/2052 [06:55<1:05:37,  2.12s/it] 10%|▉         | 195/2052 [06:57<1:06:16,  2.14s/it] 10%|▉         | 196/2052 [06:59<1:06:41,  2.16s/it] 10%|▉         | 197/2052 [07:01<1:07:00,  2.17s/it] 10%|▉         | 198/2052 [07:03<1:07:09,  2.17s/it] 10%|▉         | 199/2052 [07:06<1:07:13,  2.18s/it] 10%|▉         | 200/2052 [07:08<1:07:21,  2.18s/it] 10%|▉         | 201/2052 [07:10<1:06:30,  2.16s/it] 10%|▉         | 202/2052 [07:12<1:05:58,  2.14s/it] 10%|▉         | 203/2052 [07:14<1:05:35,  2.13s/it] 10%|▉         | 204/2052 [07:16<1:05:23,  2.12s/it] 10%|▉         | 205/2052 [07:18<1:05:09,  2.12s/it] 10%|█         | 206/2052 [07:20<1:04:57,  2.11s/it] 10%|█         | 207/2052 [07:23<1:04:49,  2.11s/it] 10%|█         | 208/2052 [07:25<1:04:40,  2.10s/it] 10%|█         | 209/2052 [07:27<1:04:38,  2.10s/it] 10%|█         | 210/2052 [07:29<1:04:35,  2.10s/it] 10%|█         | 211/2052 [07:31<1:04:31,  2.10s/it] 10%|█         | 212/2052 [07:33<1:04:28,  2.10s/it] 10%|█         | 213/2052 [07:35<1:04:24,  2.10s/it] 10%|█         | 214/2052 [07:37<1:04:21,  2.10s/it] 10%|█         | 215/2052 [07:39<1:04:17,  2.10s/it] 11%|█         | 216/2052 [07:41<1:04:14,  2.10s/it] 11%|█         | 217/2052 [07:44<1:04:16,  2.10s/it] 11%|█         | 218/2052 [07:46<1:04:19,  2.10s/it] 11%|█         | 219/2052 [07:48<1:04:17,  2.10s/it] 11%|█         | 220/2052 [07:50<1:04:17,  2.11s/it] 11%|█         | 221/2052 [07:52<1:04:18,  2.11s/it] 11%|█         | 222/2052 [07:54<1:04:14,  2.11s/it] 11%|█         | 223/2052 [07:56<1:04:11,  2.11s/it] 11%|█         | 224/2052 [07:58<1:04:04,  2.10s/it] 11%|█         | 225/2052 [08:00<1:04:01,  2.10s/it] 11%|█         | 226/2052 [08:02<1:03:59,  2.10s/it] 11%|█         | 227/2052 [08:05<1:04:01,  2.10s/it] 11%|█         | 228/2052 [08:07<1:04:01,  2.11s/it] 11%|█         | 229/2052 [08:09<1:04:01,  2.11s/it] 11%|█         | 230/2052 [08:11<1:03:58,  2.11s/it] 11%|█▏        | 231/2052 [08:13<1:03:53,  2.11s/it] 11%|█▏        | 232/2052 [08:15<1:03:50,  2.10s/it] 11%|█▏        | 233/2052 [08:17<1:03:42,  2.10s/it] 11%|█▏        | 234/2052 [08:19<1:03:37,  2.10s/it] 11%|█▏        | 235/2052 [08:21<1:03:37,  2.10s/it] 12%|█▏        | 236/2052 [08:24<1:03:36,  2.10s/it] 12%|█▏        | 237/2052 [08:26<1:03:35,  2.10s/it] 12%|█▏        | 238/2052 [08:28<1:03:29,  2.10s/it] 12%|█▏        | 239/2052 [08:30<1:03:29,  2.10s/it] 12%|█▏        | 240/2052 [08:32<1:03:30,  2.10s/it] 12%|█▏        | 241/2052 [08:34<1:04:21,  2.13s/it] 12%|█▏        | 242/2052 [08:36<1:04:52,  2.15s/it] 12%|█▏        | 243/2052 [08:38<1:05:06,  2.16s/it] 12%|█▏        | 244/2052 [08:41<1:05:13,  2.16s/it] 12%|█▏        | 245/2052 [08:43<1:05:23,  2.17s/it] 12%|█▏        | 246/2052 [08:45<1:05:29,  2.18s/it] 12%|█▏        | 247/2052 [08:47<1:05:32,  2.18s/it] 12%|█▏        | 248/2052 [08:49<1:05:35,  2.18s/it] 12%|█▏        | 249/2052 [08:52<1:05:36,  2.18s/it] 12%|█▏        | 250/2052 [08:54<1:05:35,  2.18s/it] 12%|█▏        | 251/2052 [08:56<1:05:32,  2.18s/it] 12%|█▏        | 252/2052 [08:58<1:05:29,  2.18s/it] 12%|█▏        | 253/2052 [09:00<1:05:26,  2.18s/it] 12%|█▏        | 254/2052 [09:03<1:05:23,  2.18s/it] 12%|█▏        | 255/2052 [09:05<1:04:37,  2.16s/it] 12%|█▏        | 256/2052 [09:07<1:04:04,  2.14s/it] 13%|█▎        | 257/2052 [09:09<1:03:41,  2.13s/it] 13%|█▎        | 258/2052 [09:11<1:03:23,  2.12s/it] 13%|█▎        | 259/2052 [09:13<1:03:15,  2.12s/it] 13%|█▎        | 260/2052 [09:15<1:03:06,  2.11s/it] 13%|█▎        | 261/2052 [09:17<1:02:54,  2.11s/it] 13%|█▎        | 262/2052 [09:19<1:02:45,  2.10s/it] 13%|█▎        | 263/2052 [09:21<1:02:43,  2.10s/it] 13%|█▎        | 264/2052 [09:24<1:02:41,  2.10s/it] 13%|█▎        | 265/2052 [09:26<1:02:40,  2.10s/it] 13%|█▎        | 266/2052 [09:28<1:02:38,  2.10s/it] 13%|█▎        | 267/2052 [09:30<1:02:34,  2.10s/it] 13%|█▎        | 268/2052 [09:32<1:02:33,  2.10s/it] 13%|█▎        | 269/2052 [09:34<1:02:28,  2.10s/it] 13%|█▎        | 270/2052 [09:36<1:02:26,  2.10s/it] 13%|█▎        | 271/2052 [09:38<1:02:25,  2.10s/it] 13%|█▎        | 272/2052 [09:40<1:02:19,  2.10s/it] 13%|█▎        | 273/2052 [09:42<1:02:17,  2.10s/it] 13%|█▎        | 274/2052 [09:45<1:02:11,  2.10s/it] 13%|█▎        | 275/2052 [09:47<1:02:09,  2.10s/it] 13%|█▎        | 276/2052 [09:49<1:02:07,  2.10s/it] 13%|█▎        | 277/2052 [09:51<1:02:08,  2.10s/it] 14%|█▎        | 278/2052 [09:53<1:02:07,  2.10s/it] 14%|█▎        | 279/2052 [09:55<1:02:06,  2.10s/it] 14%|█▎        | 280/2052 [09:57<1:02:04,  2.10s/it] 14%|█▎        | 281/2052 [09:59<1:02:01,  2.10s/it] 14%|█▎        | 282/2052 [10:01<1:02:00,  2.10s/it] 14%|█▍        | 283/2052 [10:03<1:01:56,  2.10s/it] 14%|█▍        | 284/2052 [10:06<1:01:52,  2.10s/it] 14%|█▍        | 285/2052 [10:08<1:01:51,  2.10s/it] 14%|█▍        | 286/2052 [10:10<1:01:52,  2.10s/it] 14%|█▍        | 287/2052 [10:12<1:01:48,  2.10s/it] 14%|█▍        | 288/2052 [10:14<1:01:44,  2.10s/it] 14%|█▍        | 289/2052 [10:16<1:01:44,  2.10s/it] 14%|█▍        | 290/2052 [10:18<1:01:40,  2.10s/it] 14%|█▍        | 291/2052 [10:20<1:01:38,  2.10s/it] 14%|█▍        | 292/2052 [10:22<1:01:35,  2.10s/it] 14%|█▍        | 293/2052 [10:24<1:01:35,  2.10s/it] 14%|█▍        | 294/2052 [10:27<1:01:33,  2.10s/it] 14%|█▍        | 295/2052 [10:29<1:01:31,  2.10s/it] 14%|█▍        | 296/2052 [10:31<1:01:32,  2.10s/it] 14%|█▍        | 297/2052 [10:33<1:01:27,  2.10s/it] 15%|█▍        | 298/2052 [10:35<1:01:25,  2.10s/it] 15%|█▍        | 299/2052 [10:37<1:01:22,  2.10s/it] 15%|█▍        | 300/2052 [10:39<1:01:25,  2.10s/it] 15%|█▍        | 301/2052 [10:41<1:01:23,  2.10s/it] 15%|█▍        | 302/2052 [10:43<1:01:22,  2.10s/it] 15%|█▍        | 303/2052 [10:45<1:01:16,  2.10s/it] 15%|█▍        | 304/2052 [10:48<1:01:17,  2.10s/it] 15%|█▍        | 305/2052 [10:50<1:01:18,  2.11s/it] 15%|█▍        | 306/2052 [10:52<1:01:11,  2.10s/it] 15%|█▍        | 307/2052 [10:54<1:01:09,  2.10s/it] 15%|█▌        | 308/2052 [10:56<1:01:07,  2.10s/it] 15%|█▌        | 309/2052 [10:58<1:01:05,  2.10s/it] 15%|█▌        | 310/2052 [11:00<1:01:03,  2.10s/it] 15%|█▌        | 311/2052 [11:02<1:00:59,  2.10s/it] 15%|█▌        | 312/2052 [11:04<1:00:55,  2.10s/it] 15%|█▌        | 313/2052 [11:07<1:01:41,  2.13s/it] 15%|█▌        | 314/2052 [11:09<1:02:13,  2.15s/it] 15%|█▌        | 315/2052 [11:11<1:02:34,  2.16s/it] 15%|█▌        | 316/2052 [11:13<1:02:44,  2.17s/it] 15%|█▌        | 317/2052 [11:15<1:02:41,  2.17s/it] 15%|█▌        | 318/2052 [11:17<1:02:04,  2.15s/it] 16%|█▌        | 319/2052 [11:20<1:01:35,  2.13s/it] 16%|█▌        | 320/2052 [11:22<1:01:21,  2.13s/it] 16%|█▌        | 321/2052 [11:24<1:01:09,  2.12s/it] 16%|█▌        | 322/2052 [11:26<1:00:58,  2.11s/it] 16%|█▌        | 323/2052 [11:28<1:00:51,  2.11s/it] 16%|█▌        | 324/2052 [11:30<1:00:49,  2.11s/it] 16%|█▌        | 325/2052 [11:32<1:00:48,  2.11s/it] 16%|█▌        | 326/2052 [11:34<1:00:43,  2.11s/it] 16%|█▌        | 327/2052 [11:36<1:00:38,  2.11s/it] 16%|█▌        | 328/2052 [11:38<1:00:33,  2.11s/it] 16%|█▌        | 329/2052 [11:41<1:00:32,  2.11s/it] 16%|█▌        | 330/2052 [11:43<1:00:30,  2.11s/it] 16%|█▌        | 331/2052 [11:45<1:00:24,  2.11s/it] 16%|█▌        | 332/2052 [11:47<1:00:21,  2.11s/it] 16%|█▌        | 333/2052 [11:49<1:00:17,  2.10s/it] 16%|█▋        | 334/2052 [11:51<1:00:14,  2.10s/it] 16%|█▋        | 335/2052 [11:53<1:00:11,  2.10s/it] 16%|█▋        | 336/2052 [11:55<1:00:07,  2.10s/it] 16%|█▋        | 337/2052 [11:57<1:00:04,  2.10s/it] 16%|█▋        | 338/2052 [12:00<1:00:04,  2.10s/it] 17%|█▋        | 339/2052 [12:02<1:00:05,  2.11s/it] 17%|█▋        | 340/2052 [12:04<1:00:03,  2.10s/it] 17%|█▋        | 341/2052 [12:06<59:58,  2.10s/it]   17%|█▋        | 342/2052 [12:08<59:55,  2.10s/it] 17%|█▋        | 343/2052 [12:10<59:51,  2.10s/it] 17%|█▋        | 344/2052 [12:12<59:52,  2.10s/it] 17%|█▋        | 345/2052 [12:14<59:47,  2.10s/it] 17%|█▋        | 346/2052 [12:16<59:45,  2.10s/it] 17%|█▋        | 347/2052 [12:18<59:44,  2.10s/it] 17%|█▋        | 348/2052 [12:21<59:41,  2.10s/it] 17%|█▋        | 349/2052 [12:23<59:40,  2.10s/it] 17%|█▋        | 350/2052 [12:25<59:35,  2.10s/it] 17%|█▋        | 351/2052 [12:27<59:35,  2.10s/it] 17%|█▋        | 352/2052 [12:29<59:37,  2.10s/it] 17%|█▋        | 353/2052 [12:31<59:36,  2.10s/it] 17%|█▋        | 354/2052 [12:33<59:30,  2.10s/it] 17%|█▋        | 355/2052 [12:35<59:26,  2.10s/it] 17%|█▋        | 356/2052 [12:37<59:22,  2.10s/it] 17%|█▋        | 357/2052 [12:39<59:19,  2.10s/it] 17%|█▋        | 358/2052 [12:42<59:17,  2.10s/it] 17%|█▋        | 359/2052 [12:44<59:17,  2.10s/it] 18%|█▊        | 360/2052 [12:46<59:15,  2.10s/it] 18%|█▊        | 361/2052 [12:48<59:12,  2.10s/it] 18%|█▊        | 362/2052 [12:50<59:08,  2.10s/it] 18%|█▊        | 363/2052 [12:52<59:04,  2.10s/it] 18%|█▊        | 364/2052 [12:54<59:01,  2.10s/it] 18%|█▊        | 365/2052 [12:56<58:58,  2.10s/it] 18%|█▊        | 366/2052 [12:58<58:56,  2.10s/it] 18%|█▊        | 367/2052 [13:00<58:56,  2.10s/it] 18%|█▊        | 368/2052 [13:03<58:56,  2.10s/it] 18%|█▊        | 369/2052 [13:05<58:55,  2.10s/it] 18%|█▊        | 370/2052 [13:07<58:53,  2.10s/it] 18%|█▊        | 371/2052 [13:09<58:50,  2.10s/it] 18%|█▊        | 372/2052 [13:11<58:49,  2.10s/it] 18%|█▊        | 373/2052 [13:13<58:47,  2.10s/it] 18%|█▊        | 374/2052 [13:15<58:42,  2.10s/it] 18%|█▊        | 375/2052 [13:17<58:41,  2.10s/it] 18%|█▊        | 376/2052 [13:19<58:39,  2.10s/it] 18%|█▊        | 377/2052 [13:21<58:33,  2.10s/it] 18%|█▊        | 378/2052 [13:24<58:31,  2.10s/it] 18%|█▊        | 379/2052 [13:26<58:30,  2.10s/it] 19%|█▊        | 380/2052 [13:28<58:32,  2.10s/it] 19%|█▊        | 381/2052 [13:30<58:28,  2.10s/it] 19%|█▊        | 382/2052 [13:32<58:25,  2.10s/it] 19%|█▊        | 383/2052 [13:34<58:22,  2.10s/it] 19%|█▊        | 384/2052 [13:36<58:21,  2.10s/it] 19%|█▉        | 385/2052 [13:38<59:05,  2.13s/it] 19%|█▉        | 386/2052 [13:41<59:38,  2.15s/it] 19%|█▉        | 387/2052 [13:43<59:59,  2.16s/it] 19%|█▉        | 388/2052 [13:45<1:00:12,  2.17s/it] 19%|█▉        | 389/2052 [13:47<1:00:24,  2.18s/it] 19%|█▉        | 390/2052 [13:49<1:00:29,  2.18s/it] 19%|█▉        | 391/2052 [13:52<1:00:28,  2.18s/it] 19%|█▉        | 392/2052 [13:54<1:00:29,  2.19s/it] 19%|█▉        | 393/2052 [13:56<1:00:31,  2.19s/it] 19%|█▉        | 394/2052 [13:58<1:00:31,  2.19s/it] 19%|█▉        | 395/2052 [14:00<1:00:29,  2.19s/it] 19%|█▉        | 396/2052 [14:02<1:00:29,  2.19s/it] 19%|█▉        | 397/2052 [14:05<1:00:27,  2.19s/it] 19%|█▉        | 398/2052 [14:07<1:00:26,  2.19s/it] 19%|█▉        | 399/2052 [14:09<59:45,  2.17s/it]   19%|█▉        | 400/2052 [14:11<59:16,  2.15s/it] 20%|█▉        | 401/2052 [14:13<58:56,  2.14s/it] 20%|█▉        | 402/2052 [14:15<58:34,  2.13s/it] 20%|█▉        | 403/2052 [14:17<58:18,  2.12s/it] 20%|█▉        | 404/2052 [14:20<58:09,  2.12s/it] 20%|█▉        | 405/2052 [14:22<57:59,  2.11s/it] 20%|█▉        | 406/2052 [14:24<57:56,  2.11s/it] 20%|█▉        | 407/2052 [14:26<57:49,  2.11s/it] 20%|█▉        | 408/2052 [14:28<57:43,  2.11s/it] 20%|█▉        | 409/2052 [14:30<57:39,  2.11s/it] 20%|█▉        | 410/2052 [14:32<57:36,  2.11s/it] 20%|██        | 411/2052 [14:34<57:34,  2.10s/it] 20%|██        | 412/2052 [14:36<57:32,  2.11s/it] 20%|██        | 413/2052 [14:38<57:29,  2.10s/it] 20%|██        | 414/2052 [14:41<57:24,  2.10s/it] 20%|██        | 415/2052 [14:43<57:25,  2.10s/it] 20%|██        | 416/2052 [14:45<57:21,  2.10s/it] 20%|██        | 417/2052 [14:47<57:19,  2.10s/it] 20%|██        | 418/2052 [14:49<57:25,  2.11s/it] 20%|██        | 419/2052 [14:51<57:25,  2.11s/it] 20%|██        | 420/2052 [14:53<57:22,  2.11s/it] 21%|██        | 421/2052 [14:55<57:22,  2.11s/it] 21%|██        | 422/2052 [14:57<57:19,  2.11s/it] 21%|██        | 423/2052 [15:00<57:16,  2.11s/it] 21%|██        | 424/2052 [15:02<57:09,  2.11s/it] 21%|██        | 425/2052 [15:04<57:02,  2.10s/it] 21%|██        | 426/2052 [15:06<57:02,  2.11s/it] 21%|██        | 427/2052 [15:08<57:01,  2.11s/it] 21%|██        | 428/2052 [15:10<56:58,  2.11s/it] 21%|██        | 429/2052 [15:12<56:55,  2.10s/it] 21%|██        | 430/2052 [15:14<56:57,  2.11s/it] 21%|██        | 431/2052 [15:16<56:51,  2.10s/it] 21%|██        | 432/2052 [15:18<56:47,  2.10s/it] 21%|██        | 433/2052 [15:21<56:47,  2.10s/it] 21%|██        | 434/2052 [15:23<56:43,  2.10s/it] 21%|██        | 435/2052 [15:25<56:41,  2.10s/it] 21%|██        | 436/2052 [15:27<59:03,  2.19s/it] 21%|██▏       | 437/2052 [15:29<58:21,  2.17s/it] 21%|██▏       | 438/2052 [15:31<57:47,  2.15s/it] 21%|██▏       | 439/2052 [15:34<57:22,  2.13s/it] 21%|██▏       | 440/2052 [15:36<57:09,  2.13s/it] 21%|██▏       | 441/2052 [15:38<56:52,  2.12s/it] 22%|██▏       | 442/2052 [15:40<56:43,  2.11s/it] 22%|██▏       | 443/2052 [15:42<56:33,  2.11s/it] 22%|██▏       | 444/2052 [15:44<56:26,  2.11s/it] 22%|██▏       | 445/2052 [15:46<56:20,  2.10s/it] 22%|██▏       | 446/2052 [15:48<56:18,  2.10s/it] 22%|██▏       | 447/2052 [15:50<56:13,  2.10s/it] 22%|██▏       | 448/2052 [15:52<56:11,  2.10s/it] 22%|██▏       | 449/2052 [15:55<56:11,  2.10s/it] 22%|██▏       | 450/2052 [15:57<56:05,  2.10s/it] 22%|██▏       | 451/2052 [15:59<56:03,  2.10s/it] 22%|██▏       | 452/2052 [16:01<55:59,  2.10s/it] 22%|██▏       | 453/2052 [16:03<55:57,  2.10s/it] 22%|██▏       | 454/2052 [16:05<55:57,  2.10s/it] 22%|██▏       | 455/2052 [16:07<55:54,  2.10s/it] 22%|██▏       | 456/2052 [16:09<55:55,  2.10s/it] 22%|██▏       | 457/2052 [16:11<55:54,  2.10s/it] 22%|██▏       | 458/2052 [16:13<55:53,  2.10s/it] 22%|██▏       | 459/2052 [16:16<55:51,  2.10s/it] 22%|██▏       | 460/2052 [16:18<56:28,  2.13s/it] 22%|██▏       | 461/2052 [16:20<56:57,  2.15s/it] 23%|██▎       | 462/2052 [16:22<57:16,  2.16s/it] 23%|██▎       | 463/2052 [16:24<57:25,  2.17s/it] 23%|██▎       | 464/2052 [16:26<57:34,  2.18s/it] 23%|██▎       | 465/2052 [16:29<57:38,  2.18s/it] 23%|██▎       | 466/2052 [16:31<57:40,  2.18s/it] 23%|██▎       | 467/2052 [16:33<57:45,  2.19s/it] 23%|██▎       | 468/2052 [16:35<57:46,  2.19s/it] 23%|██▎       | 469/2052 [16:37<57:53,  2.19s/it] 23%|██▎       | 470/2052 [16:40<57:53,  2.20s/it] 23%|██▎       | 471/2052 [16:42<57:13,  2.17s/it] 23%|██▎       | 472/2052 [16:44<56:41,  2.15s/it] 23%|██▎       | 473/2052 [16:46<56:24,  2.14s/it] 23%|██▎       | 474/2052 [16:48<56:09,  2.14s/it] 23%|██▎       | 475/2052 [16:50<55:56,  2.13s/it] 23%|██▎       | 476/2052 [16:52<55:48,  2.12s/it] 23%|██▎       | 477/2052 [16:54<55:39,  2.12s/it] 23%|██▎       | 478/2052 [16:57<55:32,  2.12s/it] 23%|██▎       | 479/2052 [16:59<55:30,  2.12s/it] 23%|██▎       | 480/2052 [17:01<55:29,  2.12s/it] 23%|██▎       | 481/2052 [17:03<55:25,  2.12s/it] 23%|██▎       | 482/2052 [17:05<55:16,  2.11s/it] 24%|██▎       | 483/2052 [17:07<55:10,  2.11s/it] 24%|██▎       | 484/2052 [17:09<55:09,  2.11s/it] 24%|██▎       | 485/2052 [17:11<55:05,  2.11s/it] 24%|██▎       | 486/2052 [17:13<54:57,  2.11s/it] 24%|██▎       | 487/2052 [17:16<54:56,  2.11s/it] 24%|██▍       | 488/2052 [17:18<54:51,  2.10s/it] 24%|██▍       | 489/2052 [17:20<54:50,  2.11s/it] 24%|██▍       | 490/2052 [17:22<54:49,  2.11s/it] 24%|██▍       | 491/2052 [17:24<54:49,  2.11s/it] 24%|██▍       | 492/2052 [17:26<54:44,  2.11s/it] 24%|██▍       | 493/2052 [17:28<54:42,  2.11s/it] 24%|██▍       | 494/2052 [17:30<54:44,  2.11s/it] 24%|██▍       | 495/2052 [17:32<54:40,  2.11s/it] 24%|██▍       | 496/2052 [17:35<54:34,  2.10s/it] 24%|██▍       | 497/2052 [17:37<54:36,  2.11s/it] 24%|██▍       | 498/2052 [17:39<54:34,  2.11s/it] 24%|██▍       | 499/2052 [17:41<54:28,  2.10s/it] 24%|██▍       | 500/2052 [17:43<54:25,  2.10s/it] 24%|██▍       | 501/2052 [17:45<54:19,  2.10s/it] 24%|██▍       | 502/2052 [17:47<54:17,  2.10s/it] 25%|██▍       | 503/2052 [17:49<54:13,  2.10s/it] 25%|██▍       | 504/2052 [17:51<54:12,  2.10s/it] 25%|██▍       | 505/2052 [17:53<54:14,  2.10s/it] 25%|██▍       | 506/2052 [17:56<54:15,  2.11s/it] 25%|██▍       | 507/2052 [17:58<54:06,  2.10s/it] 25%|██▍       | 508/2052 [18:00<54:04,  2.10s/it] 25%|██▍       | 509/2052 [18:02<54:01,  2.10s/it]EVALUATE
+Processing batch 1: all
+  Completed inference in 16 steps
+Processing batch 2: all
+  Completed inference in 16 steps
+Processing batch 3: all
+  Completed inference in 16 steps
+Processing batch 4: all
+  Completed inference in 16 steps
+Processing batch 5: all
+  Completed inference in 16 steps
+Processing batch 6: all
+  Completed inference in 16 steps
+Processing batch 7: all
+  Completed inference in 16 steps
+Processing batch 8: all
+  Completed inference in 16 steps
+Processing batch 9: all
+  Completed inference in 16 steps
+Processing batch 10: all
+  Completed inference in 16 steps
+Processing batch 11: all
+  Completed inference in 16 steps
+Processing batch 12: all
+  Completed inference in 16 steps
+Processing batch 13: all
+  Completed inference in 16 steps
+Processing batch 14: all
+  Completed inference in 16 steps
+Processing batch 15: all
+  Completed inference in 16 steps
+Processing batch 16: all
+  Completed inference in 16 steps
+Processing batch 17: all
+  Completed inference in 16 steps
+Processing batch 18: all
+  Completed inference in 16 steps
+Processing batch 19: all
+  Completed inference in 16 steps
+Processing batch 20: all
+  Completed inference in 16 steps
+Processing batch 21: all
+  Completed inference in 16 steps
+Processing batch 22: all
+  Completed inference in 16 steps
+Processing batch 23: all
+  Completed inference in 16 steps
+Processing batch 24: all
+  Completed inference in 16 steps
+Processing batch 25: all
+  Completed inference in 16 steps
+Processing batch 26: all
+  Completed inference in 16 steps
+Processing batch 27: all
+  Completed inference in 16 steps
+Processing batch 28: all
+  Completed inference in 16 steps
+Processing batch 29: all
+  Completed inference in 16 steps
+Processing batch 30: all
+  Completed inference in 16 steps
+Processing batch 31: all
+  Completed inference in 16 steps
+Processing batch 32: all
+  Completed inference in 16 steps
+Processing batch 33: all
+  Completed inference in 16 steps
+Processing batch 34: all
+  Completed inference in 16 steps
+Processing batch 35: all
+  Completed inference in 16 steps
+Processing batch 36: all
+  Completed inference in 16 steps
+Processing batch 37: all
+  Completed inference in 16 steps
+Processing batch 38: all
+  Completed inference in 16 steps
+Processing batch 39: all
+  Completed inference in 16 steps
+Processing batch 40: all
+  Completed inference in 16 steps
+Processing batch 41: all
+  Completed inference in 16 steps
+Processing batch 42: all
+  Completed inference in 16 steps
+Processing batch 43: all
+  Completed inference in 16 steps
+Processing batch 44: all
+  Completed inference in 16 steps
+Processing batch 45: all
+  Completed inference in 16 steps
+Processing batch 46: all
+  Completed inference in 16 steps
+Processing batch 47: all
+  Completed inference in 16 steps
+Processing batch 48: all
+  Completed inference in 16 steps
+Processing batch 49: all
+  Completed inference in 16 steps
+Processing batch 50: all
+  Completed inference in 16 steps
+Processing batch 51: all
+  Completed inference in 16 steps
+Processing batch 52: all
+  Completed inference in 16 steps
+Processing batch 53: all
+  Completed inference in 16 steps
+Processing batch 54: all
+  Completed inference in 16 steps
+Processing batch 55: all
+  Completed inference in 16 steps
+Processing batch 56: all
+  Completed inference in 16 steps
+Processing batch 57: all
+  Completed inference in 16 steps
+Processing batch 58: all
+  Completed inference in 16 steps
+Processing batch 59: all
+  Completed inference in 16 steps
+Processing batch 60: all
+  Completed inference in 16 steps
+Processing batch 61: all
+  Completed inference in 16 steps
+Processing batch 62: all
+  Completed inference in 16 steps
+Processing batch 63: all
+  Completed inference in 16 steps
+Processing batch 64: all
+  Completed inference in 16 steps
+Processing batch 65: all
+  Completed inference in 16 steps
+Processing batch 66: all
+  Completed inference in 16 steps
+Processing batch 67: all
+  Completed inference in 16 steps
+Processing batch 68: all
+  Completed inference in 16 steps
+Processing batch 69: all
+  Completed inference in 16 steps
+Processing batch 70: all
+  Completed inference in 16 steps
+Processing batch 71: all
+  Completed inference in 16 steps
+Processing batch 72: all
+  Completed inference in 16 steps
+Processing batch 73: all
+  Completed inference in 16 steps
+Processing batch 74: all
+  Completed inference in 16 steps
+Processing batch 75: all
+  Completed inference in 16 steps
+Processing batch 76: all
+  Completed inference in 16 steps
+Processing batch 77: all
+  Completed inference in 16 steps
+Processing batch 78: all
+  Completed inference in 16 steps
+Processing batch 79: all
+  Completed inference in 16 steps
+Processing batch 80: all
+  Completed inference in 16 steps
+Processing batch 81: all
+  Completed inference in 16 steps
+Processing batch 82: all
+  Completed inference in 16 steps
+Processing batch 83: all
+W1229 17:52:08.346000 3879861 site-packages/torch/distributed/elastic/agent/server/api.py:725] Received Signals.SIGTERM death signal, shutting down workers
+W1229 17:52:08.354000 3879861 site-packages/torch/distributed/elastic/multiprocessing/api.py:908] Sending process 3879960 closing signal SIGTERM
+W1229 17:52:08.356000 3879861 site-packages/torch/distributed/elastic/multiprocessing/api.py:908] Sending process 3879961 closing signal SIGTERM
+W1229 17:52:08.356000 3879861 site-packages/torch/distributed/elastic/multiprocessing/api.py:908] Sending process 3879962 closing signal SIGTERM
+W1229 17:52:08.356000 3879861 site-packages/torch/distributed/elastic/multiprocessing/api.py:908] Sending process 3879963 closing signal SIGTERM
+W1229 17:52:08.356000 3879861 site-packages/torch/distributed/elastic/multiprocessing/api.py:908] Sending process 3879964 closing signal SIGTERM
+W1229 17:52:08.357000 3879861 site-packages/torch/distributed/elastic/multiprocessing/api.py:908] Sending process 3879965 closing signal SIGTERM
+W1229 17:52:08.357000 3879861 site-packages/torch/distributed/elastic/multiprocessing/api.py:908] Sending process 3879966 closing signal SIGTERM
+W1229 17:52:08.357000 3879861 site-packages/torch/distributed/elastic/multiprocessing/api.py:908] Sending process 3879967 closing signal SIGTERM
+Traceback (most recent call last):
+  File "/data/miniforge3/bin/torchrun", line 8, in <module>
+    sys.exit(main())
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 357, in wrapper
+    return f(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/distributed/run.py", line 936, in main
+    run(args)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/distributed/run.py", line 927, in run
+    elastic_launch(
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 156, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 284, in launch_agent
+    result = agent.run()
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/distributed/elastic/metrics/api.py", line 138, in wrapper
+    result = f(*args, **kwargs)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/distributed/elastic/agent/server/api.py", line 717, in run
+    result = self._invoke_run(role)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/distributed/elastic/agent/server/api.py", line 881, in _invoke_run
+    time.sleep(monitor_interval)
+  File "/data/miniforge3/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 85, in _terminate_process_handler
+    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
+torch.distributed.elastic.multiprocessing.api.SignalException: Process 3879861 got signal: 15

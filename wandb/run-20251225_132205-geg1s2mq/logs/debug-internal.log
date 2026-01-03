@@ -1,0 +1,6 @@
+{"time":"2025-12-25T13:22:06.185398165+09:00","level":"INFO","msg":"stream: starting","core version":"0.23.1"}
+{"time":"2025-12-25T13:22:06.493784657+09:00","level":"INFO","msg":"stream: created new stream","id":"geg1s2mq"}
+{"time":"2025-12-25T13:22:06.49392624+09:00","level":"INFO","msg":"handler: started","stream_id":"geg1s2mq"}
+{"time":"2025-12-25T13:22:06.494058816+09:00","level":"INFO","msg":"stream: started","id":"geg1s2mq"}
+{"time":"2025-12-25T13:22:06.494097517+09:00","level":"INFO","msg":"writer: started","stream_id":"geg1s2mq"}
+{"time":"2025-12-25T13:22:06.4941152+09:00","level":"INFO","msg":"sender: started","stream_id":"geg1s2mq"}

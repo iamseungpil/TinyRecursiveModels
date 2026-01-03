@@ -1,0 +1,21 @@
+{
+  "os": "Linux-5.15.0-141-generic-x86_64-with-glibc2.35",
+  "python": "CPython 3.10.14",
+  "startedAt": "2025-12-28T19:37:19.514527Z",
+  "args": [
+    "--config-name",
+    "cfg_trm_titans_fast"
+  ],
+  "program": "/home/ubuntu/TinyRecursiveModels/pretrain.py",
+  "codePath": "pretrain.py",
+  "codePathLocal": "pretrain.py",
+  "git": {
+    "remote": "https://github.com/iamseungpil/TinyRecursiveModels.git",
+    "commit": "4fc039cc5798fde3d6ee31a6ea39d475ccff057b"
+  },
+  "email": "iamseungpil@gmail.com",
+  "root": "/home/ubuntu/TinyRecursiveModels",
+  "host": "gpu-1",
+  "executable": "/data/miniforge3/bin/python",
+  "writerId": "ipwm5m2oa1z3iik4bd24hv8sqidinre2"
+}

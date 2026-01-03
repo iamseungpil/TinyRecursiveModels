@@ -1,0 +1,24 @@
+2025-12-28 13:45:56,696 INFO    MainThread:3309313 [wandb_setup.py:_flush():80] Current SDK version is 0.23.1
+2025-12-28 13:45:56,697 INFO    MainThread:3309313 [wandb_setup.py:_flush():80] Configure stats pid to 3309313
+2025-12-28 13:45:56,697 INFO    MainThread:3309313 [wandb_setup.py:_flush():80] Loading settings from /home/ubuntu/.config/wandb/settings
+2025-12-28 13:45:56,697 INFO    MainThread:3309313 [wandb_setup.py:_flush():80] Loading settings from /home/ubuntu/TinyRecursiveModels/wandb/settings
+2025-12-28 13:45:56,697 INFO    MainThread:3309313 [wandb_setup.py:_flush():80] Loading settings from environment variables
+2025-12-28 13:45:56,697 INFO    MainThread:3309313 [wandb_init.py:setup_run_log_directory():714] Logging user logs to /home/ubuntu/TinyRecursiveModels/wandb/run-20251228_134556-42jzpf6h/logs/debug.log
+2025-12-28 13:45:56,697 INFO    MainThread:3309313 [wandb_init.py:setup_run_log_directory():715] Logging internal logs to /home/ubuntu/TinyRecursiveModels/wandb/run-20251228_134556-42jzpf6h/logs/debug-internal.log
+2025-12-28 13:45:56,697 INFO    MainThread:3309313 [wandb_init.py:init():841] calling init triggers
+2025-12-28 13:45:56,697 INFO    MainThread:3309313 [wandb_init.py:init():846] wandb.init called with sweep_config: {}
+config: {'arch': {'name': 'recursive_reasoning.trm_titans@TRM_Titans', 'loss': {'name': 'recursive_reasoning.trm_titans@TRM_Titans_ACTLossHead', 'loss_type': 'stablemax_cross_entropy'}, 'halt_exploration_prob': 0.1, 'halt_max_steps': 16, 'H_cycles': 3, 'L_cycles': 6, 'H_layers': 0, 'L_layers': 2, 'hidden_size': 512, 'num_heads': 8, 'expansion': 4, 'puzzle_emb_ndim': 512, 'pos_encodings': 'rope', 'forward_dtype': 'bfloat16', 'puzzle_emb_len': 16, 'no_ACT_continue': True, 'memory_hidden_mult': 4, 'surprise_loss_weight': 0.1}, 'data_paths': ['data/arc-aug-1000'], 'data_paths_test': ['data/arc-aug-1000'], 'evaluators': [{'name': 'arc@ARC'}], 'global_batch_size': 128, 'epochs': 5000, 'lr': 0.0001, 'lr_min_ratio': 1.0, 'lr_warmup_steps': 500, 'weight_decay': 0.1, 'beta1': 0.9, 'beta2': 0.95, 'puzzle_emb_lr': 0.01, 'puzzle_emb_weight_decay': 0.1, 'project_name': 'TRM_Titans_Training', 'run_name': 'trm_titans_fast_v6', 'load_checkpoint': None, 'checkpoint_path': '/data/TinyRecursiveModels/checkpoints/trm_titans_fast', 'seed': 0, 'checkpoint_every_eval': True, 'eval_interval': 500, 'min_eval_interval': 0, 'eval_save_outputs': [], 'ema': False, 'ema_rate': 0.999, 'freeze_weights': False, '_wandb': {}}
+2025-12-28 13:45:56,697 INFO    MainThread:3309313 [wandb_init.py:init():889] starting backend
+2025-12-28 13:45:56,958 INFO    MainThread:3309313 [wandb_init.py:init():892] sending inform_init request
+2025-12-28 13:45:56,968 INFO    MainThread:3309313 [wandb_init.py:init():900] backend started and connected
+2025-12-28 13:45:56,970 INFO    MainThread:3309313 [wandb_init.py:init():970] updated telemetry
+2025-12-28 13:45:56,977 INFO    MainThread:3309313 [wandb_init.py:init():994] communicating run to backend with 90.0 second timeout
+2025-12-28 13:45:57,652 INFO    MainThread:3309313 [wandb_init.py:init():1041] starting run threads in backend
+2025-12-28 13:45:57,810 INFO    MainThread:3309313 [wandb_run.py:_console_start():2521] atexit reg
+2025-12-28 13:45:57,810 INFO    MainThread:3309313 [wandb_run.py:_redirect():2369] redirect: wrap_raw
+2025-12-28 13:45:57,810 INFO    MainThread:3309313 [wandb_run.py:_redirect():2438] Wrapping output streams.
+2025-12-28 13:45:57,811 INFO    MainThread:3309313 [wandb_run.py:_redirect():2461] Redirects installed.
+2025-12-28 13:45:57,818 INFO    MainThread:3309313 [wandb_init.py:init():1081] run started, returning control to user process
+2025-12-28 13:45:59,125 INFO    MainThread:3309313 [wandb_run.py:_config_callback():1396] config_cb None None {'_wandb': {'code_path': 'source-TRM_Titans_Training-pretrain.py'}}
+2025-12-28 13:46:32,384 INFO    wandb-AsyncioManager-main:3309313 [service_client.py:_forward_responses():80] Reached EOF.
+2025-12-28 13:46:32,384 INFO    wandb-AsyncioManager-main:3309313 [mailbox.py:close():137] Closing mailbox, abandoning 1 handles.

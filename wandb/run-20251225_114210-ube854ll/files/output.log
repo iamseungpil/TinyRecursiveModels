@@ -1,0 +1,89 @@
+[Rank 0, World Size 4]: Epoch 0
+TRAIN
+/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_inductor/compile_fx.py:312: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. Consider setting `torch.set_float32_matmul_precision('high')` for better performance.
+  warnings.warn(
+Error executing job with overrides: ['+project_name=TRM_NM_Training', '+run_name=trm_nm_fast_v1', '+checkpoint_path=/data/TinyRecursiveModels/checkpoints/trm_nm_fast_v1']
+Traceback (most recent call last):
+  File "/home/ubuntu/TinyRecursiveModels/pretrain.py", line 611, in launch
+    metrics = train_batch(config, train_state, batch, global_batch_size, rank=RANK, world_size=WORLD_SIZE)
+  File "/home/ubuntu/TinyRecursiveModels/pretrain.py", line 305, in train_batch
+    train_state.carry, loss, metrics, _, _ = train_state.model(carry=train_state.carry, batch=batch, return_keys=[])
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 414, in __call__
+    return super().__call__(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 832, in compile_wrapper
+    return fn(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 1375, in forward
+    new_carry, outputs = self.model(carry, batch, update_memory=True, create_graph=self.training)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 1132, in forward
+    if carry.halted.any():
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 1133, in torch_dynamo_resume_in_forward_at_1132
+    self.inner.reset_memory_for_samples(carry.halted)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 1144, in torch_dynamo_resume_in_forward_at_1133
+    new_inner_carry, logits, (q_halt_logits, q_continue_logits), surprise = self.inner(
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 1056, in forward
+    z_H, surprise = self.L_level(z_H, z_L, update_memory=update_memory, create_graph=should_create_graph, **seq_info)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 794, in forward
+    hidden_states, surprise = layer(
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 744, in forward
+    attn_out, surprise = self.self_attn(
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 664, in forward
+    surprise = self.memory.update_memory(hidden_states, attn_output, create_graph=create_graph)
+  File "/home/ubuntu/TinyRecursiveModels/models/recursive_reasoning/trm_nm.py", line 287, in update_memory
+    def update_memory(self, k: torch.Tensor, v: torch.Tensor,
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 1044, in _fn
+    return fn(*args, **kwargs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_functorch/aot_autograd.py", line 1130, in forward
+    return compiled_fn(full_args)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 339, in runtime_wrapper
+    all_outs = call_func_at_runtime_with_args(
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_functorch/_aot_autograd/utils.py", line 129, in call_func_at_runtime_with_args
+    out = normalize_as_list(f(args))
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_functorch/_aot_autograd/utils.py", line 103, in g
+    return f(*args)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/autograd/function.py", line 581, in apply
+    return super().apply(*args, **kwargs)  # type: ignore[misc]
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 2118, in forward
+    fw_outs = call_func_at_runtime_with_args(
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_functorch/_aot_autograd/utils.py", line 129, in call_func_at_runtime_with_args
+    out = normalize_as_list(f(args))
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 526, in wrapper
+    return compiled_fn(runtime_args)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 724, in inner_fn
+    outs = compiled_fn(args)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_inductor/output_code.py", line 613, in __call__
+    return self.current_callable(inputs)
+  File "/data/miniforge3/envs/memgen_arc/lib/python3.10/site-packages/torch/_inductor/utils.py", line 3017, in run
+    out = model(new_inputs)
+  File "/data/tmp/torchinductor_ubuntu/x3/cx3xzpq4q3awph4quojmop4ern643rmap7dzai37emk52fslvoal.py", line 396, in call
+    buf2 = empty_strided_cuda((96, 916, 2048), (1875968, 2048, 1), torch.float32)
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 688.00 MiB. GPU 0 has a total capacity of 79.15 GiB of which 545.69 MiB is free. Including non-PyTorch memory, this process has 78.61 GiB memory in use. Of the allocated memory 76.31 GiB is allocated by PyTorch, and 1.20 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.

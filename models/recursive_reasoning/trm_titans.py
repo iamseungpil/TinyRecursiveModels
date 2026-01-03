@@ -1396,7 +1396,7 @@ class TRM_Titans_Inner(nn.Module):
 
     Key components:
     - L_level: Reasoning module with forward() (full Attn + MLP block)
-    - H_init, L_init: Learnable initial states (like original TRM)
+    - H_init, L_init: Fixed initial states as nn.Buffer (like original TRM)
 
     Forward loop structure (EXACTLY like original TRM):
         For each H_cycle:
@@ -1473,13 +1473,18 @@ class TRM_Titans_Inner(nn.Module):
 
         # v6: NO memory_H - z_H passes through L_level.forward() like original TRM
 
-        # Learnable initial states (like original TRM)
-        self.H_init = nn.Parameter(torch.zeros(self.config.hidden_size))
-        self.L_init = nn.Parameter(torch.zeros(self.config.hidden_size))
-
-        # Initialize with small random values
-        nn.init.normal_(self.H_init, std=0.02)
-        nn.init.normal_(self.L_init, std=0.02)
+        # Initial states (EXACTLY like original TRM)
+        # - nn.Buffer: NOT learnable (original TRM design)
+        # - dtype=forward_dtype: CRITICAL for dtype consistency in reset_carry
+        # - trunc_normal_init_(std=1): original TRM initialization
+        self.H_init = nn.Buffer(
+            trunc_normal_init_(torch.empty(self.config.hidden_size, dtype=self.forward_dtype), std=1),
+            persistent=True
+        )
+        self.L_init = nn.Buffer(
+            trunc_normal_init_(torch.empty(self.config.hidden_size, dtype=self.forward_dtype), std=1),
+            persistent=True
+        )
 
         # Q head initialization
         with torch.no_grad():

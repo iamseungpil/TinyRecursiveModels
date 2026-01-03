@@ -1,0 +1,9 @@
+[Rank 0, World Size 1]: Epoch 0
+TRAIN
+ 47%|████▋     | 91/192 [03:44<03:23,  2.02s/it] 
+EVALUATE
+Processing batch 1: all
+  Completed inference in 16 steps
+Processing batch 2: all
+  Completed inference in 16 steps
+Processing batch 3: all
