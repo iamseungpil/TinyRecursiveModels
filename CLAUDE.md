@@ -111,24 +111,32 @@ mal_order: memory_first  # MAL 전용: memory_first, attention_first
 └─────────────────────────────────────────────────────────┘
 ```
 
-#### Forward Loop (v7)
+#### Forward Loop (v7 Option 2A)
 ```python
 z_L = carry.z_L
 zero_injection = torch.zeros_like(input_embeddings)  # H_step용
 
 for H_step in range(H_cycles):
-    # L_cycles: z_L 업데이트 + input injection, Memory는 읽기만
-    for L_step in range(L_cycles):
-        z_L = L_level(z_L, input_embeddings, update_memory=False)
+    z_L_start = z_L.clone()  # Cycle 시작 상태 저장
 
-    # H_step: transformation 항상 실행, Memory 업데이트는 조건부
-    # input injection 없음 (zero_injection) - 원본 TRM의 z_H=L_level(z_H, z_L)과 유사
-    z_L = L_level(z_L, zero_injection, update_memory=update_memory)
+    # L_cycles: Attention만 사용 (Memory 미사용)
+    for L_step in range(L_cycles):
+        z_L = L_level(z_L, input_embeddings, use_memory=False)
+
+    # H_step: Attention + Memory 통합 (Memory 업데이트 없음)
+    z_L = L_level(z_L, zero_injection, use_memory=True, update_memory=False)
+
+    # Cycle-level Memory 업데이트: K=z_L_start, V=z_L
+    if update_memory:
+        L_level.update_all_memory(k=z_L_start, v=z_L)
 
 output = lm_head(z_L)  # z_L에서 직접 출력
 ```
 
-#### 설계 핵심
+#### Option 2A 설계 핵심
+- **L_step**: Attention만 사용 (Memory 미사용) - 빠른 처리
+- **H_step**: Attention + Memory 통합 - 느린 처리
+- **Memory 업데이트**: Cycle-level 변환 학습 (z_L_start → z_L_end)
 - **z_L**: Fast state - 매 L_step마다 업데이트
 - **Memory weights**: Slow knowledge - H_cycle마다 1회 업데이트 (z_H 대체)
 - z_H tensor 없음 → Memory weights가 implicit H-level state 역할

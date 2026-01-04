@@ -1,26 +1,27 @@
 """
-TRM-Titans v7: z_L only + Memory as implicit H-level State
+TRM-Titans v7 Option 2A: z_L only + Memory as implicit H-level State
 
-This module implements the TRM-Titans v7 architecture that simplifies the state
-management by using only z_L tensor, with Memory weights serving as implicit
-H-level state.
+This module implements the TRM-Titans v7 Option 2A architecture that simplifies
+the state management by using only z_L tensor, with Memory weights serving as
+implicit H-level state.
 
-=== TRM-TITANS V7 CORE DESIGN ===
+=== TRM-TITANS V7 OPTION 2A CORE DESIGN ===
 
 1. Simplified State Structure:
    - Only z_L tensor exists (fast state that evolves every L_step)
    - Memory weights serve as implicit H-level state (slow knowledge)
-   - Memory updates ONLY at H_cycle boundaries (not every L_step)
+   - Memory updates at H_cycle boundaries with cycle-level K/V
    - Output from z_L
 
-2. Key Changes from v6:
-   - v6: Both z_H and z_L tensors, memory updates every forward call
-   - v7: Only z_L tensor, memory updates once per H_cycle
-   - v7 is simpler and more efficient
+2. Option 2A Key Design:
+   - L_step: Attention ONLY (no Memory usage) - fast processing
+   - H_step: Attention + Memory integration - slow processing
+   - Memory Update: K=z_L_start (cycle start), V=z_L_end (cycle end)
+   - Memory learns cycle-level transformation, not step-level
 
 3. Titans Memory at Block Level:
    - Each TRM_Titans_Block has TitansAttention with implicit memory
-   - Memory learns via surprise-based updates at H_cycle boundaries
+   - Memory learns via surprise-based updates with external K/V
    - Integration strategies (MAG/MAC/MAL) are plug-and-play
 
 4. State Storage:
@@ -29,28 +30,35 @@ H-level state.
    - Both persist across ACT steps
 
 === KEY DIFFERENCES FROM V6 ===
-| v6 Design                       | v7 Design                        |
+| v6 Design                       | v7 Option 2A Design              |
 |---------------------------------|----------------------------------|
 | z_H and z_L tensors             | Only z_L tensor                  |
 | Memory updates every L_step     | Memory updates at H_cycle end    |
+| Memory used in all steps        | Memory used only in H_step       |
 | Output from z_H                 | Output from z_L                  |
 | H_init and L_init buffers       | Only L_init buffer               |
 
-=== V7 FORWARD LOOP STRUCTURE ===
+=== V7 OPTION 2A FORWARD LOOP STRUCTURE ===
 ```python
 zero_injection = torch.zeros_like(input_embeddings)  # H_step: no input injection
 for _H_step in range(H_cycles):
-    # L_cycles: z_L evolves with input injection, Memory reads but does NOT update
+    z_L_start = z_L.clone()  # Save cycle start
+
+    # L_cycles: Attention only (no Memory)
     for _L_step in range(L_cycles):
-        z_L = L_level.forward(z_L, input_embeddings, update_memory=False)
-    # H_cycle end: Memory updates ONCE (no input injection!)
-    z_L = L_level.forward(z_L, zero_injection, update_memory=True)
+        z_L = L_level.forward(z_L, input_embeddings, use_memory=False)
+
+    # H_step: Attention + Memory integration
+    z_L = L_level.forward(z_L, zero_injection, use_memory=True, update_memory=False)
+
+    # Cycle-level memory update with external K/V
+    L_level.update_all_memory(k=z_L_start, v=z_L)
 # Output from z_L
 ```
 
-=== TITANS CONCEPTS (ADAPTED) ===
+=== TITANS CONCEPTS (ADAPTED FOR OPTION 2A) ===
 1. Implicit State: Block-level memories store patterns in weights (H-level)
-2. K->V Mapping: Memories learn input->output associations via surprise
+2. K->V Mapping: Memories learn cycle-level transformation (z_L_start -> z_L_end)
 3. Integration Strategies (plug-and-play for layer memories):
    - MAG (Memory as Gate): Confidence-based mixing
    - MAC (Memory as Context): Memory as attention KV context
@@ -63,17 +71,18 @@ for _H_step in range(H_cycles):
 - L_cycles: Number of low-level computation cycles per H_cycle
 - z_L: Only state tensor stored in carry
 
-=== LEARNING DESIGN (v7) ===
+=== LEARNING DESIGN (v7 Option 2A) ===
 
 1. LM Loss:
    - Optimizes all trainable parameters (lm_head, attention, MLP, embeddings)
    - z_L passes through full L_level, so gradients flow normally
 
-2. Layer Memory Learning (during forward pass):
+2. Layer Memory Learning (Option 2A):
    - Layer memories update via surprise-based gradient descent
-   - Updates happen ONLY at H_cycle boundaries
+   - Updates happen at H_cycle boundaries with external K/V
+   - K = z_L at cycle start, V = z_L at cycle end
    - Uses: M_t = (1 - alpha) * M_{t-1} - eta * grad(surprise)
-   - Layer memories learn: "how attention transforms input"
+   - Layer memories learn: "cycle-level transformation"
 
 3. Surprise Loss:
    - Includes layer memory surprise only
@@ -695,6 +704,35 @@ class TitansMemory(nn.Module):
 
             return surprise.detach()
 
+    @torch.compiler.disable  # Disable compilation for this method (uses autograd.grad)
+    def update_with_external_kv(
+        self,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        create_graph: bool = False
+    ) -> torch.Tensor:
+        """
+        Update memory weights with externally provided K/V.
+
+        Option 2A Design: Memory learns cycle-level transformation
+        - K = z_L at H_cycle start
+        - V = z_L at H_cycle end
+
+        This separates memory update from the integration combine() method,
+        allowing cycle-level learning where memory learns the transformation
+        from cycle start to cycle end.
+
+        Args:
+            k: External key (z_L_start) [B, L, D]
+            v: External value (z_L_end) [B, L, D]
+            create_graph: Whether to create computation graph for meta-learning
+
+        Returns:
+            surprise: Mean squared prediction error (for logging/loss)
+        """
+        # Reuse existing update() logic with external K/V
+        return self.update(k, v, create_graph=create_graph)
+
 
 # =============================================================================
 # Titans Block with Memory-Attention Integration (MAG)
@@ -951,6 +989,7 @@ class TitansAttention(nn.Module):
         self,
         cos_sin: CosSin,
         hidden_states: torch.Tensor,
+        use_memory: bool = True,
         update_memory: bool = True,
         create_graph: bool = False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -963,17 +1002,29 @@ class TitansAttention(nn.Module):
         - MAC: Memory as attention context
         - MAL: Sequential processing
 
+        Option 2A Design:
+        - use_memory=False: Attention only (L_step behavior)
+        - use_memory=True: Attention + Memory integration (H_step behavior)
+
         Args:
             cos_sin: Rotary position embeddings (cos, sin) or None
             hidden_states: Input tensor [B, L, D]
+            use_memory: Whether to use memory in this forward pass (Option 2A)
+                        If False, only attention is computed (for L_steps)
             update_memory: Whether to update memory state
             create_graph: Whether to create computation graph for backprop
 
         Returns:
             output: Combined output [B, L, D]
-            surprise: Memory prediction error
+            surprise: Memory prediction error (0.0 if use_memory=False)
         """
         batch_size, seq_len, _ = hidden_states.shape
+
+        # Option 2A: If use_memory=False, skip memory entirely (Attention only)
+        # This is used during L_steps for fast processing
+        if not use_memory:
+            attn_output = self._standard_attention(hidden_states, cos_sin)
+            return attn_output, torch.zeros((), device=hidden_states.device, dtype=torch.float32)
 
         # Compute memory and attention based on integration type
         # (Conditional computation to avoid wasted work)
@@ -1006,6 +1057,32 @@ class TitansAttention(nn.Module):
         )
 
         return output, surprise
+
+    def update_memory_with_external_kv(
+        self,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        create_graph: bool = False
+    ) -> torch.Tensor:
+        """
+        Update memory with external K/V (for cycle-level learning).
+
+        Option 2A Design: Memory learns cycle-level transformation
+        - K = z_L at H_cycle start
+        - V = z_L at H_cycle end
+
+        This is called separately from forward() to update memory
+        with cycle-level state changes.
+
+        Args:
+            k: External key (z_L_start) [B, L, D]
+            v: External value (z_L_end) [B, L, D]
+            create_graph: Whether to create computation graph for meta-learning
+
+        Returns:
+            surprise: Mean squared prediction error
+        """
+        return self.memory.update_with_external_kv(k, v, create_graph=create_graph)
 
 
 # Backward compatibility alias
@@ -1064,6 +1141,7 @@ class TRM_Titans_Block(nn.Module):
         self,
         cos_sin: CosSin,
         hidden_states: torch.Tensor,
+        use_memory: bool = True,
         update_memory: bool = True,
         create_graph: bool = False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -1073,9 +1151,14 @@ class TRM_Titans_Block(nn.Module):
         TRM-Titans v3: This is called L_cycles times per H_cycle.
         Attention captures fast, contextual information.
 
+        Option 2A Design:
+        - use_memory=False: Attention only (L_step behavior)
+        - use_memory=True: Attention + Memory integration (H_step behavior)
+
         Args:
             cos_sin: Rotary position embeddings (cos, sin) or None
             hidden_states: Input tensor [B, L, D]
+            use_memory: Whether to use memory in this forward pass (Option 2A)
             update_memory: Whether to update layer memory state
             create_graph: Whether to create computation graph for backprop
 
@@ -1086,6 +1169,7 @@ class TRM_Titans_Block(nn.Module):
         attn_out, surprise = self.self_attn(
             cos_sin=cos_sin,
             hidden_states=hidden_states,
+            use_memory=use_memory,
             update_memory=update_memory,
             create_graph=create_graph
         )
@@ -1113,6 +1197,7 @@ class TRM_Titans_Block(nn.Module):
         self,
         cos_sin: CosSin,
         hidden_states: torch.Tensor,
+        use_memory: bool = True,
         update_memory: bool = True,
         create_graph: bool = False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -1122,9 +1207,14 @@ class TRM_Titans_Block(nn.Module):
         Calls both attention_forward and mlp_forward sequentially.
         Returns h_state as main output.
 
+        Option 2A Design:
+        - use_memory=False: Attention only (L_step behavior)
+        - use_memory=True: Attention + Memory integration (H_step behavior)
+
         Args:
             cos_sin: Rotary position embeddings (cos, sin) or None
             hidden_states: Input tensor [B, L, D]
+            use_memory: Whether to use memory in this forward pass (Option 2A)
             update_memory: Whether to update memory state
             create_graph: Whether to create computation graph for backprop
 
@@ -1136,12 +1226,36 @@ class TRM_Titans_Block(nn.Module):
         l_state, surprise = self.attention_forward(
             cos_sin=cos_sin,
             hidden_states=hidden_states,
+            use_memory=use_memory,
             update_memory=update_memory,
             create_graph=create_graph
         )
         # MLP -> h_state
         h_state = self.mlp_forward(l_state)
         return h_state, surprise
+
+    def update_memory_with_external_kv(
+        self,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        create_graph: bool = False
+    ) -> torch.Tensor:
+        """
+        Update memory with external K/V (for cycle-level learning).
+
+        Option 2A Design: Memory learns cycle-level transformation
+        - K = z_L at H_cycle start
+        - V = z_L at H_cycle end
+
+        Args:
+            k: External key (z_L_start) [B, L, D]
+            v: External value (z_L_end) [B, L, D]
+            create_graph: Whether to create computation graph for meta-learning
+
+        Returns:
+            surprise: Mean squared prediction error
+        """
+        return self.self_attn.update_memory_with_external_kv(k, v, create_graph=create_graph)
 
 
 # =============================================================================
@@ -1176,6 +1290,7 @@ class TRM_Titans_ReasoningModule(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_injection: torch.Tensor,
+        use_memory: bool = True,
         update_memory: bool = True,
         create_graph: bool = False,
         **kwargs
@@ -1186,9 +1301,14 @@ class TRM_Titans_ReasoningModule(nn.Module):
         TRM-Titans v3: This is called L_cycles times per H_cycle.
         Captures contextual, fast information through attention only.
 
+        Option 2A Design:
+        - use_memory=False: Attention only (L_step behavior)
+        - use_memory=True: Attention + Memory integration (H_step behavior)
+
         Args:
             hidden_states: Current l_state [B, L, D]
             input_injection: Injection from h_state + input_embeddings [B, L, D]
+            use_memory: Whether to use memory in this forward pass (Option 2A)
             update_memory: Whether to update layer memories
             create_graph: Whether to create computation graph for backprop
             **kwargs: Additional arguments (e.g., cos_sin for RoPE)
@@ -1203,6 +1323,7 @@ class TRM_Titans_ReasoningModule(nn.Module):
         for layer in self.layers:
             hidden_states, surprise = layer.attention_forward(
                 hidden_states=hidden_states,
+                use_memory=use_memory,
                 update_memory=update_memory,
                 create_graph=create_graph,
                 **kwargs
@@ -1232,6 +1353,7 @@ class TRM_Titans_ReasoningModule(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_injection: torch.Tensor,
+        use_memory: bool = True,
         update_memory: bool = True,
         create_graph: bool = False,
         **kwargs
@@ -1241,9 +1363,14 @@ class TRM_Titans_ReasoningModule(nn.Module):
 
         Calls both attention and MLP for each layer sequentially.
 
+        Option 2A Design:
+        - use_memory=False: Attention only (L_step behavior)
+        - use_memory=True: Attention + Memory integration (H_step behavior)
+
         Args:
             hidden_states: Input tensor [B, L, D]
             input_injection: Injection tensor [B, L, D]
+            use_memory: Whether to use memory in this forward pass (Option 2A)
             update_memory: Whether to update memory state
             create_graph: Whether to create computation graph for backprop
             **kwargs: Additional arguments (e.g., cos_sin for RoPE)
@@ -1258,6 +1385,7 @@ class TRM_Titans_ReasoningModule(nn.Module):
         for layer in self.layers:
             hidden_states, surprise = layer(
                 hidden_states=hidden_states,
+                use_memory=use_memory,
                 update_memory=update_memory,
                 create_graph=create_graph,
                 **kwargs
@@ -1265,6 +1393,36 @@ class TRM_Titans_ReasoningModule(nn.Module):
             total_surprise = total_surprise + surprise
 
         return hidden_states, total_surprise
+
+    def update_all_memory(
+        self,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        create_graph: bool = False
+    ) -> torch.Tensor:
+        """
+        Update all layer memories with external K/V.
+
+        Option 2A Design: Memory learns cycle-level transformation
+        - K = z_L at H_cycle start
+        - V = z_L at H_cycle end
+
+        This updates all layer memories in this reasoning module
+        with the same cycle-level transformation signal.
+
+        Args:
+            k: External key (z_L_start) [B, L, D]
+            v: External value (z_L_end) [B, L, D]
+            create_graph: Whether to create computation graph for meta-learning
+
+        Returns:
+            total_surprise: Sum of surprise values from all layers
+        """
+        total_surprise = torch.tensor(0.0, device=k.device, dtype=torch.float32)
+        for layer in self.layers:
+            surprise = layer.update_memory_with_external_kv(k, v, create_graph=create_graph)
+            total_surprise = total_surprise + surprise
+        return total_surprise
 
 
 # =============================================================================
@@ -1574,27 +1732,30 @@ class TRM_Titans_Inner(nn.Module):
         create_graph: bool = False
     ) -> Tuple[TRM_Titans_InnerCarry, torch.Tensor, Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """
-        Forward pass using TRM-Titans v7 architecture.
+        Forward pass using TRM-Titans v7 Option 2A architecture.
 
-        TRM-Titans v7 Core Design: z_L only + Memory as implicit H-level state
-            - Only z_L tensor exists (fast state)
-            - Memory weights serve as implicit H-level state (slow knowledge)
-            - Memory updates ONLY at H_cycle boundaries (not every L_step)
-            - Output from z_L
+        TRM-Titans v7 Option 2A Design:
+            - L_step: Attention only (no Memory usage)
+            - H_step: Attention + Memory integration
+            - Memory update: K=z_L_start (cycle start), V=z_L_end (cycle end)
 
-        Architecture (v7 design):
+        Architecture (Option 2A):
             For each H_cycle:
+                z_L_start = z_L.clone()  # Save cycle start
                 For each L_cycle:
-                    z_L = L_level.forward(z_L, input_embeddings, update_memory=False)
-                # H_step: transformation always runs, memory updates conditionally
-                z_L = L_level.forward(z_L, zero_injection, update_memory=update_memory)
+                    z_L = L_level.forward(z_L, input_embeddings, use_memory=False)  # Attn only
+                # H_step: Attention + Memory
+                z_L = L_level.forward(z_L, zero_injection, use_memory=True, update_memory=False)
+                # Cycle-level memory update with external K/V
+                if update_memory:
+                    L_level.update_all_memory(k=z_L_start, v=z_L)
             Output from z_L
 
-        Key design principles (v7):
-        - z_L is the only explicit state tensor (fast/contextual)
-        - Memory weights are implicit H-level state (slow/abstract)
-        - Memory updates only at H_cycle boundaries for efficiency
-        - Simpler than v6: no z_H tensor management
+        Key design principles (Option 2A):
+        - L_steps use Attention only (fast processing without Memory)
+        - H_steps use Attention + Memory integration
+        - Memory learns cycle-level transformation: z_L_start -> z_L_end
+        - This separates Memory update from the forward integration
 
         Returns:
             new_carry: Updated carry with z_L only
@@ -1633,52 +1794,77 @@ class TRM_Titans_Inner(nn.Module):
         z_L = carry.z_L
 
         # H_cycles-1 without grad (only final cycle has gradients for efficiency)
-        # Memory updates only at H_cycle boundaries, not during L_cycles
+        # Option 2A: L_steps use Attention only, H_steps use Attention + Memory
+        # When H_cycles=1, this loop runs 0 times - only final cycle executes
         with torch.no_grad():
             for _H_step in range(self.config.H_cycles - 1):
-                # L_cycles: z_L evolves, Memory reads but does NOT update
+                # Save z_L at cycle start for cycle-level memory update (K=start, V=end)
+                # Memory cost: B * L * D * sizeof(dtype), e.g., 8*512*512*2 = 4MB per clone
+                z_L_start = z_L.clone()
+
+                # L_cycles: Attention only (no Memory)
                 for _L_step in range(self.config.L_cycles):
                     z_L, _ = self.L_level.forward(
                         z_L, input_embeddings,
-                        update_memory=False,  # No update during L_cycles
+                        use_memory=False,  # Option 2A: Attention only in L_step
+                        update_memory=False,
                         create_graph=False,
                         **seq_info
                     )
-                # H_cycle end: H_step transformation always runs, memory updates conditionally
-                # H_step uses zero_injection: transformation without input injection
+
+                # H_step: Attention + Memory integration (but no update inside forward)
                 z_L, _ = self.L_level.forward(
-                    z_L, zero_injection,  # H_step: no input injection
-                    update_memory=update_memory,  # Pass through external flag
+                    z_L, zero_injection,
+                    use_memory=True,  # Option 2A: Use Memory in H_step
+                    update_memory=False,  # Don't update inside forward
                     create_graph=False,
                     **seq_info
                 )
 
+                # Cycle-level memory update with external K/V
+                if update_memory:
+                    _ = self.L_level.update_all_memory(
+                        k=z_L_start,
+                        v=z_L,
+                        create_graph=False
+                    )
+
         # Final H_cycle with grad
-        # L_cycles: z_L evolves, Memory reads but does NOT update
+        # Save z_L at cycle start for memory update
+        z_L_start = z_L.clone()
+
+        # L_cycles: Attention only (no Memory)
         for _L_step in range(self.config.L_cycles):
             z_L, _ = self.L_level.forward(
                 z_L, input_embeddings,
-                update_memory=False,  # No update during L_cycles
+                use_memory=False,  # Option 2A: Attention only in L_step
+                update_memory=False,
                 create_graph=should_create_graph,
                 **seq_info
             )
 
-        # Final H_cycle end: H_step transformation always runs, memory updates conditionally
-        # H_step uses zero_injection: transformation without input injection
-        z_L, surprise = self.L_level.forward(
-            z_L, zero_injection,  # H_step: no input injection
-            update_memory=update_memory,  # Pass through external flag
+        # H_step: Attention + Memory integration (but no update inside forward)
+        z_L, _ = self.L_level.forward(
+            z_L, zero_injection,
+            use_memory=True,  # Option 2A: Use Memory in H_step
+            update_memory=False,  # Don't update inside forward
             create_graph=should_create_graph,
             **seq_info
         )
+
+        # Cycle-level memory update with external K/V
         if update_memory:
-            total_surprise = surprise
+            total_surprise = self.L_level.update_all_memory(
+                k=z_L_start,
+                v=z_L,
+                create_graph=should_create_graph
+            )
 
         # Synchronize all GPUs after memory updates before final output computation
         _sync_if_distributed()
 
         # Normalize surprise by the number of surprise terms accumulated
-        # v7: Memory updates once per H_cycle, only in final cycle with grad
+        # Option 2A: Memory updates once per H_cycle, only in final cycle with grad
         # Surprise comes from the final memory update (1 term per layer)
         n_L_layers = len(self.L_level.layers)
         total_surprise = total_surprise / max(n_L_layers, 1)
