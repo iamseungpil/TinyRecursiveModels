@@ -9,7 +9,7 @@ TRM-Titans는 **TRM (Tiny Recursive Model)의 계층적 추론 구조**와 **Tit
 **핵심 목표:**
 1. **Test-Time Adaptation**: 새로운 퍼즐에 대해 demo examples로 빠르게 적응
 2. **Simplified State**: z_L만 관리, Memory weights가 H-level 역할 대체
-3. **Pattern Memory**: Surprise 기반 학습으로 input→output 패턴 저장 (H_cycle마다)
+3. **Pattern Memory**: Surprise 기반 학습으로 input→output 패턴 저장 (매 step, 낮은 lr/decay로 slow dynamics)
 4. **Plug-and-Play Integration**: MAG/MAC/MAL 전략 간 쉬운 전환
 
 ---
@@ -153,12 +153,12 @@ output = lm_head(z_L)  # z_L에서 직접 출력
 ### 4.1 TRM과의 차이점
 1. **z_H 제거**: Memory weights가 H-level implicit state 역할
 2. **TitansMemory 추가**: 각 block에 Memory MLP 추가
-3. **Surprise 학습**: Memory는 H_cycle 끝에서 학습
+3. **Surprise 학습**: Memory는 매 step 업데이트 (Continuous Update)
 4. **Integration Strategy**: MAG/MAC/MAL 선택 가능
 5. **Test-Time Adaptation**: TTT 지원
 
 ### 4.2 Titans와의 차이점
-1. **Memory 업데이트 타이밍**: H_cycle 끝에만 (매 step X)
+1. **Memory 업데이트 타이밍**: 매 step (원본 Titans와 동일)
 2. **H_cycles/L_cycles**: 계층적 반복 구조 유지
 3. **ACT (Adaptive Computation Time)**: 동적 halting 지원
 4. **Puzzle Embedding**: Task-specific embedding 학습

@@ -1,27 +1,29 @@
 """
-TRM-Titans v7 Option 2A: z_L only + Memory as implicit H-level State
+TRM-Titans v7: z_L only + Memory as implicit H-level State (Continuous Update)
 
-This module implements the TRM-Titans v7 Option 2A architecture that simplifies
+This module implements the TRM-Titans v7 architecture that simplifies
 the state management by using only z_L tensor, with Memory weights serving as
-implicit H-level state.
+implicit H-level state through continuous surprise-based updates.
 
-=== TRM-TITANS V7 OPTION 2A CORE DESIGN ===
+=== TRM-TITANS V7 CORE DESIGN (CONTINUOUS UPDATE) ===
 
 1. Simplified State Structure:
-   - Only z_L tensor exists (fast state that evolves every L_step)
+   - Only z_L tensor exists (fast state that evolves every step)
    - Memory weights serve as implicit H-level state (slow knowledge)
-   - Memory updates at H_cycle boundaries with cycle-level K/V
+   - Memory updates every step via surprise-based learning
+   - Memory's "slowness" comes from low lr/decay, not update frequency
    - Output from z_L
 
-2. Option 2A Key Design:
-   - L_step: Attention ONLY (no Memory usage) - fast processing
-   - H_step: Attention + Memory integration - slow processing
-   - Memory Update: K=z_L_start (cycle start), V=z_L_end (cycle end)
-   - Memory learns cycle-level transformation, not step-level
+2. Continuous Update Key Design:
+   - L_step: Memory + Attention (update_memory=True)
+   - H_step: Memory + Attention (update_memory=True), zero input injection
+   - Memory Update: K=hidden_states, V=attn_output (step-level)
+   - Memory learns step-level input->output mapping
+   - MAG gating works at every step (can shortcut attention when confident)
 
 3. Titans Memory at Block Level:
    - Each TRM_Titans_Block has TitansAttention with implicit memory
-   - Memory learns via surprise-based updates with external K/V
+   - Memory learns via surprise-based updates at every step
    - Integration strategies (MAG/MAC/MAL) are plug-and-play
 
 4. State Storage:
@@ -30,59 +32,56 @@ implicit H-level state.
    - Both persist across ACT steps
 
 === KEY DIFFERENCES FROM V6 ===
-| v6 Design                       | v7 Option 2A Design              |
+| v6 Design                       | v7 Continuous Update Design      |
 |---------------------------------|----------------------------------|
 | z_H and z_L tensors             | Only z_L tensor                  |
-| Memory updates every L_step     | Memory updates at H_cycle end    |
-| Memory used in all steps        | Memory used only in H_step       |
+| Memory updates every L_step     | Memory updates every step        |
+| Memory used in all steps        | Memory used in all steps         |
 | Output from z_H                 | Output from z_L                  |
 | H_init and L_init buffers       | Only L_init buffer               |
 
-=== V7 OPTION 2A FORWARD LOOP STRUCTURE ===
+=== V7 CONTINUOUS UPDATE FORWARD LOOP STRUCTURE ===
 ```python
 zero_injection = torch.zeros_like(input_embeddings)  # H_step: no input injection
 for _H_step in range(H_cycles):
-    z_L_start = z_L.clone()  # Save cycle start
-
-    # L_cycles: Attention only (no Memory)
+    # L_cycles: z_L evolves with Memory (continuous update)
     for _L_step in range(L_cycles):
-        z_L = L_level.forward(z_L, input_embeddings, use_memory=False)
+        z_L, surprise = L_level.forward(z_L, input_embeddings, update_memory=True)
 
-    # H_step: Attention + Memory integration
-    z_L = L_level.forward(z_L, zero_injection, use_memory=True, update_memory=False)
-
-    # Cycle-level memory update with external K/V
-    L_level.update_all_memory(k=z_L_start, v=z_L)
+    # H_step: same processing, zero injection (no new input)
+    z_L, surprise = L_level.forward(z_L, zero_injection, update_memory=True)
 # Output from z_L
 ```
 
-=== TITANS CONCEPTS (ADAPTED FOR OPTION 2A) ===
+=== TITANS CONCEPTS (CONTINUOUS UPDATE) ===
 1. Implicit State: Block-level memories store patterns in weights (H-level)
-2. K->V Mapping: Memories learn cycle-level transformation (z_L_start -> z_L_end)
-3. Integration Strategies (plug-and-play for layer memories):
-   - MAG (Memory as Gate): Confidence-based mixing
+2. K->V Mapping: Memories learn step-level transformation (hidden_states -> attn_output)
+3. Memory Slowness: Low learning rate (mem_lr) and decay (mem_decay) create slow dynamics
+4. Integration Strategies (plug-and-play for layer memories):
+   - MAG (Memory as Gate): Confidence-based mixing at every step
    - MAC (Memory as Context): Memory as attention KV context
    - MAL (Memory as Layer): Sequential processing
 
 === ARCHITECTURE ===
 - Only L_level exists (H_layers config is ignored)
-- L_level.forward(): Full block processing (Attention + MLP)
-- H_cycles: Number of high-level reasoning cycles (memory updates per H_cycle)
+- L_level.forward(): Full block processing (Attention + MLP + Memory)
+- H_cycles: Number of high-level reasoning cycles
 - L_cycles: Number of low-level computation cycles per H_cycle
 - z_L: Only state tensor stored in carry
 
-=== LEARNING DESIGN (v7 Option 2A) ===
+=== LEARNING DESIGN (v7 CONTINUOUS UPDATE) ===
 
 1. LM Loss:
    - Optimizes all trainable parameters (lm_head, attention, MLP, embeddings)
    - z_L passes through full L_level, so gradients flow normally
 
-2. Layer Memory Learning (Option 2A):
+2. Layer Memory Learning (Continuous Update):
    - Layer memories update via surprise-based gradient descent
-   - Updates happen at H_cycle boundaries with external K/V
-   - K = z_L at cycle start, V = z_L at cycle end
+   - Updates happen at every step during forward pass
+   - K = hidden_states (input to attention)
+   - V = attn_output (attention result)
    - Uses: M_t = (1 - alpha) * M_{t-1} - eta * grad(surprise)
-   - Layer memories learn: "cycle-level transformation"
+   - Memory's slowness from low mem_lr and mem_decay, not update frequency
 
 3. Surprise Loss:
    - Includes layer memory surprise only
@@ -101,7 +100,7 @@ Usage:
 
     # During test-time adaptation
     ttt = TRM_Titans_TestTime(model)
-    ttt.test_time_adapt(demo_pairs)  # Layer memories adapt at H_cycle boundaries
+    ttt.test_time_adapt(demo_pairs)  # Layer memories adapt continuously
     predictions = ttt.predict(test_input)
 """
 
@@ -714,17 +713,19 @@ class TitansMemory(nn.Module):
         """
         Update memory weights with externally provided K/V.
 
-        Option 2A Design: Memory learns cycle-level transformation
-        - K = z_L at H_cycle start
-        - V = z_L at H_cycle end
+        Alternative Implementation Hook:
+        This method provides an extension point for cycle-level memory updates
+        where K and V are provided externally (e.g., K=z_L_start, V=z_L_end).
 
-        This separates memory update from the integration combine() method,
-        allowing cycle-level learning where memory learns the transformation
-        from cycle start to cycle end.
+        Current v7 uses continuous updates (K=hidden_states, V=attn_output at
+        every step), but this method is retained for:
+        - Alternative update strategies
+        - Backward compatibility
+        - Future experimentation with cycle-level learning
 
         Args:
-            k: External key (z_L_start) [B, L, D]
-            v: External value (z_L_end) [B, L, D]
+            k: External key tensor [B, L, D]
+            v: External value tensor [B, L, D]
             create_graph: Whether to create computation graph for meta-learning
 
         Returns:
@@ -1064,18 +1065,18 @@ class TitansAttention(nn.Module):
         create_graph: bool = False
     ) -> torch.Tensor:
         """
-        Update memory with external K/V (for cycle-level learning).
+        Update memory with external K/V (for alternative cycle-level learning).
 
-        Option 2A Design: Memory learns cycle-level transformation
-        - K = z_L at H_cycle start
-        - V = z_L at H_cycle end
+        Alternative Implementation Hook:
+        This method provides an extension point for cycle-level memory updates
+        where K and V are provided externally (e.g., K=z_L_start, V=z_L_end).
 
-        This is called separately from forward() to update memory
-        with cycle-level state changes.
+        Current v7 uses continuous updates (K=hidden_states, V=attn_output at
+        every step), but this method is retained for backward compatibility.
 
         Args:
-            k: External key (z_L_start) [B, L, D]
-            v: External value (z_L_end) [B, L, D]
+            k: External key tensor [B, L, D]
+            v: External value tensor [B, L, D]
             create_graph: Whether to create computation graph for meta-learning
 
         Returns:
@@ -1150,14 +1151,15 @@ class TRM_Titans_Block(nn.Module):
         TRM-Titans v3: This is called L_cycles times per H_cycle.
         Attention captures fast, contextual information.
 
-        Option 2A Design:
-        - use_memory=False: Attention only (L_step behavior)
-        - use_memory=True: Attention + Memory integration (H_step behavior)
+        Continuous Update Design:
+        - Memory is used and updated at every step (both L_step and H_step)
+        - use_memory controls whether Memory participates in the forward pass
+        - update_memory controls whether Memory weights are updated
 
         Args:
             cos_sin: Rotary position embeddings (cos, sin) or None
             hidden_states: Input tensor [B, L, D]
-            use_memory: Whether to use memory in this forward pass (Option 2A)
+            use_memory: Whether to use memory in this forward pass
             update_memory: Whether to update layer memory state
             create_graph: Whether to create computation graph for backprop
 
@@ -1206,14 +1208,15 @@ class TRM_Titans_Block(nn.Module):
         Calls both attention_forward and mlp_forward sequentially.
         Returns h_state as main output.
 
-        Option 2A Design:
-        - use_memory=False: Attention only (L_step behavior)
-        - use_memory=True: Attention + Memory integration (H_step behavior)
+        Continuous Update Design:
+        - Memory is used and updated at every step (both L_step and H_step)
+        - use_memory controls whether Memory participates in the forward pass
+        - update_memory controls whether Memory weights are updated
 
         Args:
             cos_sin: Rotary position embeddings (cos, sin) or None
             hidden_states: Input tensor [B, L, D]
-            use_memory: Whether to use memory in this forward pass (Option 2A)
+            use_memory: Whether to use memory in this forward pass
             update_memory: Whether to update memory state
             create_graph: Whether to create computation graph for backprop
 
@@ -1240,15 +1243,18 @@ class TRM_Titans_Block(nn.Module):
         create_graph: bool = False
     ) -> torch.Tensor:
         """
-        Update memory with external K/V (for cycle-level learning).
+        Update memory with external K/V (for alternative cycle-level learning).
 
-        Option 2A Design: Memory learns cycle-level transformation
-        - K = z_L at H_cycle start
-        - V = z_L at H_cycle end
+        Alternative Implementation Hook:
+        This method provides an extension point for cycle-level memory updates
+        where K and V are provided externally (e.g., K=z_L_start, V=z_L_end).
+
+        Current v7 uses continuous updates (K=hidden_states, V=attn_output at
+        every step), but this method is retained for backward compatibility.
 
         Args:
-            k: External key (z_L_start) [B, L, D]
-            v: External value (z_L_end) [B, L, D]
+            k: External key tensor [B, L, D]
+            v: External value tensor [B, L, D]
             create_graph: Whether to create computation graph for meta-learning
 
         Returns:
@@ -1300,14 +1306,15 @@ class TRM_Titans_ReasoningModule(nn.Module):
         TRM-Titans v3: This is called L_cycles times per H_cycle.
         Captures contextual, fast information through attention only.
 
-        Option 2A Design:
-        - use_memory=False: Attention only (L_step behavior)
-        - use_memory=True: Attention + Memory integration (H_step behavior)
+        Continuous Update Design:
+        - Memory is used and updated at every step (both L_step and H_step)
+        - use_memory controls whether Memory participates in the forward pass
+        - update_memory controls whether Memory weights are updated
 
         Args:
             hidden_states: Current l_state [B, L, D]
             input_injection: Injection from h_state + input_embeddings [B, L, D]
-            use_memory: Whether to use memory in this forward pass (Option 2A)
+            use_memory: Whether to use memory in this forward pass
             update_memory: Whether to update layer memories
             create_graph: Whether to create computation graph for backprop
             **kwargs: Additional arguments (e.g., cos_sin for RoPE)
@@ -1362,14 +1369,15 @@ class TRM_Titans_ReasoningModule(nn.Module):
 
         Calls both attention and MLP for each layer sequentially.
 
-        Option 2A Design:
-        - use_memory=False: Attention only (L_step behavior)
-        - use_memory=True: Attention + Memory integration (H_step behavior)
+        Continuous Update Design:
+        - Memory is used and updated at every step (both L_step and H_step)
+        - use_memory controls whether Memory participates in the forward pass
+        - update_memory controls whether Memory weights are updated
 
         Args:
             hidden_states: Input tensor [B, L, D]
             input_injection: Injection tensor [B, L, D]
-            use_memory: Whether to use memory in this forward pass (Option 2A)
+            use_memory: Whether to use memory in this forward pass
             update_memory: Whether to update memory state
             create_graph: Whether to create computation graph for backprop
             **kwargs: Additional arguments (e.g., cos_sin for RoPE)
@@ -1402,16 +1410,20 @@ class TRM_Titans_ReasoningModule(nn.Module):
         """
         Update all layer memories with external K/V.
 
-        Option 2A Design: Memory learns cycle-level transformation
-        - K = z_L at H_cycle start
-        - V = z_L at H_cycle end
+        Alternative Implementation Hook:
+        This method provides an extension point for cycle-level memory updates
+        where all layer memories are updated with the same external K/V pair
+        (e.g., K=z_L_start, V=z_L_end at H_cycle boundaries).
 
-        This updates all layer memories in this reasoning module
-        with the same cycle-level transformation signal.
+        Current v7 uses continuous updates (Memory.update() called at every step
+        with K=hidden_states, V=attn_output), but this method is retained for:
+        - Alternative update strategies
+        - Backward compatibility
+        - Future experimentation with cycle-level learning
 
         Args:
-            k: External key (z_L_start) [B, L, D]
-            v: External value (z_L_end) [B, L, D]
+            k: External key tensor [B, L, D]
+            v: External value tensor [B, L, D]
             create_graph: Whether to create computation graph for meta-learning
 
         Returns:
@@ -1435,7 +1447,8 @@ class TRM_Titans_Config(BaseModel):
     TRM-Titans v7 Architecture: z_L only + Memory as implicit H-level state
     - Only z_L tensor exists in carry (fast state)
     - Memory weights serve as implicit H-level state (slow knowledge)
-    - Memory updates ONLY at H_cycle boundaries (not every L_step)
+    - Memory updates continuously at every step (Continuous Update design)
+    - Memory's "slowness" comes from low mem_lr/mem_decay, not update frequency
     - Output from z_L
 
     Integration types (MAG/MAC/MAL) are plug-and-play for layer memories.
@@ -1516,9 +1529,9 @@ class TRM_Titans_InnerCarry:
     Inner carry for TRM-Titans v7.
 
     v7 simplifies state to only z_L tensor. Memory MLP weights serve as
-    implicit H-level state - the Memory weights are updated only at H_cycle
-    boundaries, providing slow/abstract processing, while z_L evolves every
-    L_step for fast/contextual processing.
+    implicit H-level state - Memory is updated at every step but its slow
+    dynamics (from low mem_lr/mem_decay) provide slow/abstract processing,
+    while z_L evolves every step for fast/contextual processing.
     """
     z_L: torch.Tensor  # [B, L, D] - Only state tensor (fast state)
 
@@ -1541,28 +1554,30 @@ class TRM_Titans_Inner(nn.Module):
     Inner model for TRM-Titans v7.
 
     TRM-Titans v7 Architecture: z_L only + Memory as implicit H-level state
-    - Only z_L tensor exists (fast state that evolves every L_step)
+    - Only z_L tensor exists (fast state that evolves every step)
     - Memory weights serve as implicit H-level state (slow knowledge)
-    - Memory updates ONLY at H_cycle boundaries (not every L_step)
+    - Memory updates at every step (Continuous Update design)
+    - Memory's "slowness" comes from low lr/decay, not update frequency
     - Output from z_L
 
     Key components:
-    - L_level: Reasoning module with forward() (full Attn + MLP block)
+    - L_level: Reasoning module with forward() (full Attn + MLP + Memory block)
     - L_init: Fixed initial state for z_L as nn.Buffer
 
-    Forward loop structure (v7 design):
+    Forward loop structure (v7 Continuous Update design):
         zero_injection = torch.zeros_like(input_embeddings)
         For each H_cycle:
             For each L_cycle:
-                z_L = L_level.forward(z_L, input_embeddings, update_memory=False)
-            # H_step: transformation always runs, memory updates conditionally
-            z_L = L_level.forward(z_L, zero_injection, update_memory=update_memory)
+                z_L, surprise = L_level.forward(z_L, input_embeddings, update_memory=True)
+            # H_step: same processing, zero injection (no new input)
+            z_L, surprise = L_level.forward(z_L, zero_injection, update_memory=True)
         Output from z_L
 
-    Key Design Principles (v7):
+    Key Design Principles (v7 Continuous Update):
     - z_L is the only explicit state tensor (fast/contextual)
     - Memory weights are implicit H-level state (slow/abstract)
-    - Memory updates only at H_cycle boundaries for efficiency
+    - Memory updates every step, slowness from low mem_lr/mem_decay
+    - MAG gating can shortcut attention when Memory is confident
     - Simpler than v6: no z_H tensor management
 
     Properties:
@@ -1731,30 +1746,28 @@ class TRM_Titans_Inner(nn.Module):
         create_graph: bool = False
     ) -> Tuple[TRM_Titans_InnerCarry, torch.Tensor, Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """
-        Forward pass using TRM-Titans v7 Option 2A architecture.
+        Forward pass using TRM-Titans v7 Continuous Update architecture.
 
-        TRM-Titans v7 Option 2A Design:
-            - L_step: Attention only (no Memory usage)
-            - H_step: Attention + Memory integration
-            - Memory update: K=z_L_start (cycle start), V=z_L_end (cycle end)
+        TRM-Titans v7 Continuous Update Design:
+            - L_step: Memory + Attention (update_memory=True)
+            - H_step: Memory + Attention (update_memory=True), zero input injection
+            - Memory update: K=hidden_states, V=attn_output (step-level)
+            - Memory's "slowness" comes from low lr/decay, not update frequency
 
-        Architecture (Option 2A):
+        Architecture (Continuous Update):
             For each H_cycle:
-                z_L_start = z_L.clone()  # Save cycle start
                 For each L_cycle:
-                    z_L = L_level.forward(z_L, input_embeddings, use_memory=False)  # Attn only
-                # H_step: Attention + Memory
-                z_L = L_level.forward(z_L, zero_injection, use_memory=True, update_memory=False)
-                # Cycle-level memory update with external K/V
-                if update_memory:
-                    L_level.update_all_memory(k=z_L_start, v=z_L)
+                    z_L, surprise = L_level.forward(z_L, input_embeddings, update_memory=True)
+                # H_step: same processing, zero injection (no new input)
+                z_L, surprise = L_level.forward(z_L, zero_injection, update_memory=True)
             Output from z_L
 
-        Key design principles (Option 2A):
-        - L_steps use Attention only (fast processing without Memory)
-        - H_steps use Attention + Memory integration
-        - Memory learns cycle-level transformation: z_L_start -> z_L_end
-        - This separates Memory update from the forward integration
+        Key design principles (Continuous Update):
+        - Memory used and updated at every step (L_step and H_step)
+        - MAG gating can shortcut attention when Memory is confident
+        - Memory learns step-level transformation: hidden_states -> attn_output
+        - Memory's slow dynamics from low mem_lr and mem_decay parameters
+        - H_cycles-1 run without gradients for efficiency (only final cycle has grads)
 
         Returns:
             new_carry: Updated carry with z_L only
@@ -1873,17 +1886,19 @@ class TRM_Titans(nn.Module):
     TRM-Titans v7 Core Design: z_L only + Memory as implicit H-level state
     - Only z_L tensor exists in carry (fast state)
     - Memory weights serve as implicit H-level state (slow knowledge)
-    - Memory updates ONLY at H_cycle boundaries
+    - Memory updates continuously at every step (Continuous Update design)
+    - Memory's "slowness" comes from low lr/decay, not update frequency
     - Output from z_L
 
     Architecture:
     - Only L_level exists (H_layers is ignored)
-    - L_level.forward(): Full block processing (Attn + MLP)
+    - L_level.forward(): Full block processing (Attn + MLP + Memory)
     - Integration types (MAG/MAC/MAL) are plug-and-play via config
 
-    Memory Design (v7):
+    Memory Design (v7 Continuous Update):
     - Memory weights are implicit H-level state
-    - Memory updates once per H_cycle (not every L_step)
+    - Memory updates at every step (both L_step and H_step)
+    - Memory's slow dynamics from low mem_lr and mem_decay parameters
     - Layer memory templates can be FROZEN (requires_grad=False)
     - _current_weights adapt during forward pass via surprise
 
@@ -1910,8 +1925,8 @@ class TRM_Titans(nn.Module):
         """
         Freeze layer memory template weights.
 
-        TRM-Titans v7 Design:
-        - Layer memories learn via SURPRISE during forward pass (at H_cycle boundaries)
+        TRM-Titans v7 Continuous Update Design:
+        - Layer memories learn via SURPRISE during forward pass (every step)
         - Layer memory templates should NOT receive gradients from optimizer
 
         Call this method before training.
@@ -2153,7 +2168,7 @@ class TRM_Titans_ACTLossHead(nn.Module):
 
     TRM-Titans v7 Loss Design:
     - LM loss: Optimizes all trainable parameters
-    - Layer memories learn via SURPRISE during forward pass (at H_cycle boundaries)
+    - Layer memories learn via SURPRISE during forward pass (every step)
     - Q losses: Optimize parameters for halting decisions
     - Surprise loss: Logged for monitoring (layer memories only)
 
@@ -2176,10 +2191,10 @@ class TRM_Titans_ACTLossHead(nn.Module):
         """
         Enforce v7 loss design by freezing layer memory template parameters.
 
-        TRM-Titans v7 design:
+        TRM-Titans v7 Continuous Update design:
         - Layer memories learn via forward-pass surprise updates (frozen templates)
-        - Memory updates only at H_cycle boundaries
-        - z_L passes through full L_level (Attn + MLP) normally
+        - Memory updates every step, slowness from low mem_lr/mem_decay
+        - z_L passes through full L_level (Attn + MLP + Memory) normally
 
         This method ensures layer memory templates don't receive gradients.
         """
@@ -2241,12 +2256,12 @@ class TRM_Titans_ACTLossHead(nn.Module):
 
         TRM-Titans v7 Loss Design:
         - LM loss: Optimizes all trainable parameters
-        - Layer memories learn via SURPRISE at H_cycle boundaries
+        - Layer memories learn via SURPRISE every step (Continuous Update)
         - Q losses: Optimize parameters for halting decisions
         - Surprise includes layer memory only
 
         Gradient Flow:
-        - z_L passes through L_level.forward() (Attn + MLP) normally
+        - z_L passes through L_level.forward() (Attn + MLP + Memory) normally
         - Layer memory templates are frozen (surprise-based learning only)
         - LM loss optimizes: lm_head, attention, MLP, embeddings
 
@@ -2292,7 +2307,7 @@ class TRM_Titans_ACTLossHead(nn.Module):
         )
 
         # Surprise loss - this is logged but NOT added to total_loss
-        # v7: Layer memories learn via surprise during forward pass (at H_cycle boundaries)
+        # v7: Layer memories learn via surprise during forward pass (every step)
         surprise_loss = outputs.get("surprise", torch.tensor(0.0, device=lm_loss.device))
         surprise_weight = self.model.config.surprise_loss_weight
 
@@ -2319,10 +2334,10 @@ class TRM_Titans_ACTLossHead(nn.Module):
         # Q losses ARE included because halting decisions benefit from memory state
         total_loss = lm_loss + 0.5 * (q_halt_loss + q_continue_loss)
 
-        # TRM-Titans v7 Design:
+        # TRM-Titans v7 Continuous Update Design:
         # - Layer memory templates have requires_grad=False (surprise-based learning)
-        # - z_L passes through L_level.forward() (Attn + MLP) normally
-        # - Memory updates only at H_cycle boundaries
+        # - z_L passes through L_level.forward() (Attn + MLP + Memory) normally
+        # - Memory updates every step, slowness from low mem_lr/mem_decay
         #
         # This is enforced by freeze_memory_templates() called in __init__.
 
@@ -2375,7 +2390,7 @@ class TRM_Titans_TestTime:
 
     TRM-Titans v7 Test-Time Adaptation Design:
     - z_L: Only state tensor that evolves via L_level.forward()
-    - Layer memories: Adapt automatically via surprise-based update at H_cycle boundaries
+    - Layer memories: Adapt automatically via surprise-based update (every step)
     - Puzzle_emb: Optionally trained via optimizer (optional)
     """
 
@@ -2388,8 +2403,8 @@ class TRM_Titans_TestTime:
         """
         Freeze parameters for test-time adaptation following v7 design.
 
-        TRM-Titans v7 Design:
-        - Layer memories adapt via forward-pass surprise update at H_cycle boundaries
+        TRM-Titans v7 Continuous Update Design:
+        - Layer memories adapt via forward-pass surprise update (every step)
         - Only puzzle_emb uses optimizer.step() (optional)
         - All other parameters are frozen
 
@@ -2414,7 +2429,7 @@ class TRM_Titans_TestTime:
         Get parameters that are learned via optimizer at test-time.
 
         Following v7 design, only puzzle_emb is optimized.
-        Layer memories learn during forward pass via memory.update() at H_cycle boundaries.
+        Layer memories learn during forward pass via memory.update() at every step.
         """
         return [p for p in self.model.parameters() if p.requires_grad]
 
@@ -2448,7 +2463,7 @@ class TRM_Titans_TestTime:
 
         TRM-Titans v7 Test-Time Adaptation:
         - z_L evolves via L_level.forward()
-        - Layer memories adapt automatically at H_cycle boundaries via surprise-based update
+        - Layer memories adapt automatically at every step via surprise-based update
         - Puzzle_emb optionally trained via optimizer
 
         Memory Accumulation Behavior (accumulate_memory=True, default):
