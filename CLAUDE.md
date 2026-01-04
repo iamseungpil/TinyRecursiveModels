@@ -111,35 +111,29 @@ mal_order: memory_first  # MAL 전용: memory_first, attention_first
 └─────────────────────────────────────────────────────────┘
 ```
 
-#### Forward Loop (v7 Option 2A)
+#### Forward Loop (v7 Continuous Update)
 ```python
 z_L = carry.z_L
 zero_injection = torch.zeros_like(input_embeddings)  # H_step용
 
 for H_step in range(H_cycles):
-    z_L_start = z_L.clone()  # Cycle 시작 상태 저장
-
-    # L_cycles: Attention만 사용 (Memory 미사용)
+    # L_cycles: z_L + Memory 매 step 업데이트
     for L_step in range(L_cycles):
-        z_L = L_level(z_L, input_embeddings, use_memory=False)
+        z_L, surprise = L_level(z_L, input_embeddings, update_memory=True)
 
-    # H_step: Attention + Memory 통합 (Memory 업데이트 없음)
-    z_L = L_level(z_L, zero_injection, use_memory=True, update_memory=False)
-
-    # Cycle-level Memory 업데이트: K=z_L_start, V=z_L
-    if update_memory:
-        L_level.update_all_memory(k=z_L_start, v=z_L)
+    # H_step: 동일하게 처리, zero injection (새 입력 없음)
+    z_L, surprise = L_level(z_L, zero_injection, update_memory=True)
 
 output = lm_head(z_L)  # z_L에서 직접 출력
 ```
 
-#### Option 2A 설계 핵심
-- **L_step**: Attention만 사용 (Memory 미사용) - 빠른 처리
-- **H_step**: Attention + Memory 통합 - 느린 처리
-- **Memory 업데이트**: Cycle-level 변환 학습 (z_L_start → z_L_end)
+#### Continuous Update 설계 핵심
+- **매 step**: Memory 사용 + 업데이트 (원본 Titans와 동일)
+- **Memory의 "느림"**: 업데이트 빈도가 아닌 낮은 lr/decay에서 옴
+- **MAG gating**: 매 step에서 Memory가 confident하면 Attention shortcut
 - **z_L**: Fast state - 매 L_step마다 업데이트
-- **Memory weights**: Slow knowledge - H_cycle마다 1회 업데이트 (z_H 대체)
-- z_H tensor 없음 → Memory weights가 implicit H-level state 역할
+- **Memory weights**: Slow knowledge - 매 step 업데이트하지만 변화량 작음
+- **계층 구조 유지**: H_cycles/L_cycles 루프 + input injection 패턴
 
 ---
 
@@ -149,8 +143,8 @@ output = lm_head(z_L)  # z_L에서 직접 출력
 |------|-----------|--------|---------------|
 | **H-level 상태** | z_H tensor | Memory weights | Memory weights (z_H 제거) |
 | **L-level 상태** | z_L tensor | Activations | z_L tensor |
-| **H↔L 상호작용** | z_H ↔ z_L via L_level | Memory ↔ Attention | Memory ↔ z_L (H_cycle마다) |
-| **Memory 학습** | N/A | Surprise (매 step) | Surprise (H_cycle 끝) |
+| **H↔L 상호작용** | z_H ↔ z_L via L_level | Memory ↔ Attention | Memory ↔ z_L (매 step) |
+| **Memory 학습** | N/A | Surprise (매 step) | Surprise (매 step) |
 | **Attention 학습** | Backprop | Backprop | Backprop (final cycle) |
 | **MLP 학습** | Backprop | Backprop | Backprop (final cycle) |
 | **Test-Time Learning** | No | Yes (memory) | Yes (memory + puzzle_emb) |

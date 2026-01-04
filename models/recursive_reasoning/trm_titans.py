@@ -998,19 +998,19 @@ class TitansAttention(nn.Module):
 
         The integration strategy determines how memory and attention outputs
         are combined:
-        - MAG: Confidence-based gating
+        - MAG: Confidence-based gating (default)
         - MAC: Memory as attention context
         - MAL: Sequential processing
 
-        Option 2A Design:
-        - use_memory=False: Attention only (L_step behavior)
-        - use_memory=True: Attention + Memory integration (H_step behavior)
+        Continuous Update Design:
+        - Memory is used and updated every step (like original Titans)
+        - Memory's "slowness" comes from low lr/decay dynamics
+        - MAG gating can shortcut attention when Memory is confident
 
         Args:
             cos_sin: Rotary position embeddings (cos, sin) or None
             hidden_states: Input tensor [B, L, D]
-            use_memory: Whether to use memory in this forward pass (Option 2A)
-                        If False, only attention is computed (for L_steps)
+            use_memory: Whether to use memory (default True, set False to skip)
             update_memory: Whether to update memory state
             create_graph: Whether to create computation graph for backprop
 
@@ -1020,8 +1020,7 @@ class TitansAttention(nn.Module):
         """
         batch_size, seq_len, _ = hidden_states.shape
 
-        # Option 2A: If use_memory=False, skip memory entirely (Attention only)
-        # This is used during L_steps for fast processing
+        # If use_memory=False, skip memory entirely (Attention only)
         if not use_memory:
             attn_output = self._standard_attention(hidden_states, cos_sin)
             return attn_output, torch.zeros((), device=hidden_states.device, dtype=torch.float32)
@@ -1794,80 +1793,60 @@ class TRM_Titans_Inner(nn.Module):
         z_L = carry.z_L
 
         # H_cycles-1 without grad (only final cycle has gradients for efficiency)
-        # Option 2A: L_steps use Attention only, H_steps use Attention + Memory
+        # Continuous Update Design: Memory used and updated every step
+        # - Memory's "slowness" comes from low lr/decay, not update frequency
+        # - MAG gating works at every step (can shortcut attention)
         # When H_cycles=1, this loop runs 0 times - only final cycle executes
         with torch.no_grad():
             for _H_step in range(self.config.H_cycles - 1):
-                # Save z_L at cycle start for cycle-level memory update (K=start, V=end)
-                # Memory cost: B * L * D * sizeof(dtype), e.g., 8*512*512*2 = 4MB per clone
-                z_L_start = z_L.clone()
-
-                # L_cycles: Attention only (no Memory)
+                # L_cycles: z_L evolves with Memory (continuous update)
                 for _L_step in range(self.config.L_cycles):
                     z_L, _ = self.L_level.forward(
                         z_L, input_embeddings,
-                        use_memory=False,  # Option 2A: Attention only in L_step
-                        update_memory=False,
+                        update_memory=update_memory,
                         create_graph=False,
                         **seq_info
                     )
 
-                # H_step: Attention + Memory integration (but no update inside forward)
+                # H_step: same processing, zero injection (no new input)
                 z_L, _ = self.L_level.forward(
                     z_L, zero_injection,
-                    use_memory=True,  # Option 2A: Use Memory in H_step
-                    update_memory=False,  # Don't update inside forward
+                    update_memory=update_memory,
                     create_graph=False,
                     **seq_info
                 )
 
-                # Cycle-level memory update with external K/V
-                if update_memory:
-                    _ = self.L_level.update_all_memory(
-                        k=z_L_start,
-                        v=z_L,
-                        create_graph=False
-                    )
-
         # Final H_cycle with grad
-        # Save z_L at cycle start for memory update
-        z_L_start = z_L.clone()
-
-        # L_cycles: Attention only (no Memory)
+        # L_cycles: z_L evolves with Memory
         for _L_step in range(self.config.L_cycles):
-            z_L, _ = self.L_level.forward(
+            z_L, surprise = self.L_level.forward(
                 z_L, input_embeddings,
-                use_memory=False,  # Option 2A: Attention only in L_step
-                update_memory=False,
+                update_memory=update_memory,
                 create_graph=should_create_graph,
                 **seq_info
             )
+            if update_memory:
+                total_surprise = total_surprise + surprise
 
-        # H_step: Attention + Memory integration (but no update inside forward)
-        z_L, _ = self.L_level.forward(
+        # H_step: final transformation with zero injection
+        z_L, surprise = self.L_level.forward(
             z_L, zero_injection,
-            use_memory=True,  # Option 2A: Use Memory in H_step
-            update_memory=False,  # Don't update inside forward
+            update_memory=update_memory,
             create_graph=should_create_graph,
             **seq_info
         )
-
-        # Cycle-level memory update with external K/V
         if update_memory:
-            total_surprise = self.L_level.update_all_memory(
-                k=z_L_start,
-                v=z_L,
-                create_graph=should_create_graph
-            )
+            total_surprise = total_surprise + surprise
 
         # Synchronize all GPUs after memory updates before final output computation
         _sync_if_distributed()
 
         # Normalize surprise by the number of surprise terms accumulated
-        # Option 2A: Memory updates once per H_cycle, only in final cycle with grad
-        # Surprise comes from the final memory update (1 term per layer)
+        # Continuous Update: Memory updates every step in final cycle
+        # Surprise terms: (L_cycles + 1) steps * n_L_layers layers
         n_L_layers = len(self.L_level.layers)
-        total_surprise = total_surprise / max(n_L_layers, 1)
+        n_steps_in_final_cycle = self.config.L_cycles + 1  # L_cycles + H_step
+        total_surprise = total_surprise / max(n_L_layers * n_steps_in_final_cycle, 1)
 
         # OUTPUT FROM z_L (v7 design)
         # Only skip puzzle_emb positions if puzzle embeddings are actually used
